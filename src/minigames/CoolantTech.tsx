@@ -12,8 +12,8 @@ export const CoolantTechMinigame: React.FC<MinigameProps> = ({
     description={`Tap leaks in twin tubes. Load ${Math.round(reactorEnergy * 100)}%, Hull ${Math.round(
       shipHealth * 100
     )}%.`}
-    onSuccess={() => onComplete("success", 1, -3, +0.05)}
-    onPartial={() => onComplete("partial", 0.6, -2, 0)}
-    onFail={() => onComplete("fail", 0.2, -1, -0.02)}
+    onSuccess={() => onComplete("success", 1)}
+    onPartial={() => onComplete("partial", 0.6)}
+    onFail={() => onComplete("fail", 0.2)}
   />
 );
