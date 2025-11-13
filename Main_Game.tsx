@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import type {
-  ItemId,
   ItemInstance,
   Job,
   MinigameResult,
@@ -12,6 +11,8 @@ import type {
   RoundState,
 } from "./src/game/types";
 import { nextPhase } from "./src/game/state/machine";
+import { InventoryPanel } from "./src/ui/inventory/InventoryPanel";
+import { InventoryTabButton } from "./src/ui/inventory/InventoryTabButton";
 import {
   EngagePhase,
   GameOverPhase,
@@ -35,51 +36,6 @@ const LOCAL_PLAYER_ID = "p1";
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 const randomCard = () => 1 + Math.floor(Math.random() * 9);
-
-const itemDescription = (id: ItemId): string => {
-  switch (id) {
-    case "BOOST":
-      return "+3 to the reactor total this round.";
-    case "VENT":
-      return "-3 to the reactor total, easing overload risk.";
-    case "EQUALIZER":
-      return "If below Gate: +2. Otherwise: -2 to the reactor total.";
-    default:
-      return "";
-  }
-};
-
-const ItemIcon: React.FC<{ id: ItemId }> = ({ id }) => {
-  const strokeClass =
-    id === "BOOST"
-      ? "text-amber-300"
-      : id === "VENT"
-      ? "text-sky-300"
-      : "text-emerald-300";
-
-  const pathD =
-    id === "BOOST"
-      ? "M8 2 L13 8 L8 14 L3 8 Z" // diamond
-      : id === "VENT"
-      ? "M3 4 H13 V12 H3 Z" // square
-      : "M2 12 C4 4, 9 14, 14 3"; // wave
-
-  return (
-    <svg
-      className={`h-4 w-4 ${strokeClass}`}
-      viewBox="0 0 16 16"
-      fill="none"
-      strokeWidth={1.5}
-    >
-      <path
-        d={pathD}
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-};
 
 const createDefaultPlayers = (): Player[] => {
   const baseItems = (job: Job): ItemInstance[] => {
@@ -243,40 +199,6 @@ const RoundHeader: React.FC<RoundHeaderProps> = ({ gate, reactorLimit, shipHealt
   </header>
 );
 
-type InventoryTabButtonProps = {
-  hasUsableItems: boolean;
-  isOpen: boolean;
-  onToggle: () => void;
-};
-
-// UPDATED: Keep inside the main container, positioned near the top-right with a small buffer
-const InventoryTabButton: React.FC<InventoryTabButtonProps> = ({ hasUsableItems, isOpen, onToggle }) => (
-  <button
-    type="button"
-    onClick={onToggle}
-    className={`absolute right-2 top-5 rounded-l-2xl px-1.5 py-3 text-[10px] font-semibold flex flex-col items-center gap-1 shadow-lg border ${
-      isOpen ? "bg-emerald-900/90 border-emerald-500" : "bg-slate-900/95 border-slate-700"
-    }`}
-  >
-    <svg
-      viewBox="0 0 16 16"
-      className={`h-4 w-4 ${hasUsableItems ? "text-emerald-300" : "text-slate-200"}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.4}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="3" width="10" height="10" rx="1.5" />
-      <path d="M3 7h10" />
-    </svg>
-    <span className="rotate-90">INV</span>
-    {hasUsableItems && (
-      <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.9)]" />
-    )}
-  </button>
-);
-
 // --- Minigame placeholders ---
 
 interface MinigameProps {
@@ -355,80 +277,6 @@ const FluxSpecialistMinigame: React.FC<MinigameProps> = ({ reactorEnergy, shipHe
     onFail={() => onComplete("fail", 0.2, 0, -0.02)}
   />
 );
-
-// --- Inventory panel ---
-
-type InventoryPanelProps = {
-  localPlayer: Player;
-  phase: Phase;
-  onClose: () => void;
-  onUseItem: (item: ItemInstance) => void;
-};
-
-const InventoryPanel: React.FC<InventoryPanelProps> = ({ localPlayer, phase, onClose, onUseItem }) => {
-  const [focusedItem, setFocusedItem] = useState<ItemId | null>(null);
-  const canUseItems = phase === "Engage";
-
-  return (
-    <div className="absolute top-2 right-2 w-56 sm:w-60 rounded-2xl bg-slate-950/95 border border-slate-700 shadow-xl p-3 z-20">
-      <div className="flex justify-between items-center mb-2">
-        <div className="flex flex-col">
-          <span className="text-[11px] text-slate-400">Inventory</span>
-          <span className="text-xs text-slate-200 font-semibold">
-            {localPlayer.name} · {jobLabel(localPlayer.job)}
-          </span>
-        </div>
-        <button onClick={onClose} className="h-6 w-6 rounded-full bg-slate-900 border border-slate-600 flex items-center justify-center text-xs text-slate-300">
-          ✕
-        </button>
-      </div>
-      <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-        {localPlayer.items.length === 0 && (
-          <div className="text-[11px] text-slate-500">No station items.</div>
-        )}
-        {localPlayer.items.map((item) => {
-          const isFocused = focusedItem === item.id;
-          const isUsable = canUseItems && !item.used && item.timing === "Engage";
-          return (
-            <div key={item.id} className="flex flex-col gap-1">
-              <button
-                type="button"
-                onMouseEnter={() => setFocusedItem(item.id)}
-                onMouseLeave={() => setFocusedItem((prev) => (prev === item.id ? null : prev))}
-                onClick={() => {
-                  if (isUsable) {
-                    onUseItem(item);
-                  } else {
-                    setFocusedItem((prev) => (prev === item.id ? null : item.id));
-                  }
-                }}
-                className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg border text-[11px] transition-colors ${
-                  item.used
-                    ? "bg-slate-900 border-slate-800 text-slate-500 line-through"
-                    : isUsable
-                    ? "bg-emerald-600/10 border-emerald-400/70 text-slate-100"
-                    : "bg-slate-900 border-slate-700 text-slate-200"
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <ItemIcon id={item.id} />
-                  <span className="font-semibold">{item.name}</span>
-                </div>
-                <span className="text-[9px] uppercase tracking-wide text-slate-400">{item.timing}</span>
-              </button>
-              <div className={`text-[10px] text-slate-400 transition-all ${isFocused ? "opacity-100 max-h-12" : "opacity-0 max-h-0 overflow-hidden"}`}>
-                {itemDescription(item.id)}
-                {!canUseItems && (
-                  <span className="block mt-0.5 text-[9px] text-slate-500">Usable during ENGAGE.</span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
 
 // --- Main component ---
 
@@ -806,6 +654,7 @@ const CoreCollapseGame: React.FC = () => {
             <InventoryPanel
               localPlayer={localPlayer}
               phase={phase}
+              jobLabel={jobLabel}
               onClose={() => setIsInventoryOpen(false)}
               onUseItem={handleUseItemFromInventory}
             />
