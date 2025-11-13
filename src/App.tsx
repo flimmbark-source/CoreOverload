@@ -420,7 +420,10 @@ const App: React.FC = () => {
     const minigameKey = `${player.id}-${player.job}-${round.index}`;
     const abilityName = JOB_MINIGAME_NAME[player.job];
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-slate-950/95 z-30 rounded-2xl p-4">
+      <div
+        key="minigame-overlay"
+        className="absolute inset-0 flex items-center justify-center bg-slate-950/95 z-30 rounded-2xl p-4"
+      >
         <div className="w-full max-w-xl bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl">
           <div className="flex justify-between items-center text-xs text-slate-300 mb-2">
             <span>
@@ -489,6 +492,7 @@ const App: React.FC = () => {
 
           {isInventoryOpen && localPlayer && (
             <InventoryPanel
+              key="inventory-panel"
               localPlayer={localPlayer}
               phase={phase}
               onClose={() => setIsInventoryOpen(false)}
