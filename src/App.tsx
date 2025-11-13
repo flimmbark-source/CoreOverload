@@ -299,6 +299,14 @@ const App: React.FC = () => {
     const nextRoundIndex = roundIndex + 1;
     setRoundIndex(nextRoundIndex);
     setRound(createInitialRound(nextRoundIndex, players));
+    setPlayers((prev) =>
+      prev.map((player) => ({
+        ...player,
+        items: player.items.map((item) =>
+          item.timing === "Engage" ? { ...item, used: false } : item,
+        ),
+      })),
+    );
     dealHand();
     setPhase("Plan");
   }, [clears, dealHand, overloads, players, reactorLimit, round, roundIndex, shipHealth01]);
