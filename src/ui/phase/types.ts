@@ -10,7 +10,6 @@ export type PhaseUIState = {
   clears: number;
   hand: number[];
   slotCard: number | null;
-  engageSeatIndex: number;
 };
 
 export type PhaseUIDispatch = (event: string, payload?: unknown) => void;

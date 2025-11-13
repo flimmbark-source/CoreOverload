@@ -66,7 +66,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
   const canUseItems = phase === "Engage";
 
   return (
-    <div className="absolute top-2 right-2 w-56 sm:w-60 rounded-2xl bg-slate-950/95 border border-slate-700 shadow-xl p-3 z-20">
+    <div className="absolute top-2 right-2 w-56 sm:w-60 rounded-2xl bg-slate-950/95 border border-slate-700 shadow-xl p-3 z-50">
       <div className="flex justify-between items-center mb-2">
         <div className="flex flex-col">
           <span className="text-[11px] text-slate-400">Inventory</span>

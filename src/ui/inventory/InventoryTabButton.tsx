@@ -14,7 +14,7 @@ export const InventoryTabButton: React.FC<InventoryTabButtonProps> = ({
   <button
     type="button"
     onClick={onToggle}
-    className={`absolute right-2 top-5 rounded-l-2xl px-1.5 py-3 text-[10px] font-semibold flex flex-col items-center gap-1 shadow-lg border ${
+    className={`absolute right-2 top-5 rounded-l-2xl px-1.5 py-3 text-[10px] font-semibold flex flex-col items-center gap-1 shadow-lg border z-50 ${
       isOpen ? "bg-emerald-900/90 border-emerald-500" : "bg-slate-900/95 border-slate-700"
     }`}
   >

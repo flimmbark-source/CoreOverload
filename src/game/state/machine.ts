@@ -7,8 +7,6 @@ export type GameEvent =
   | "PLAN_LOCK_IN"
   | "IGNITION_DONE"
   | "ENGAGE_NEXT"
-  | "MINIGAME_START"
-  | "MINIGAME_COMPLETE"
   | "MAINTENANCE_RESOLVE"
   | "RESTART";
 
@@ -18,10 +16,8 @@ const transitions: Record<GamePhase, Partial<Record<GameEvent, GamePhase>>> = {
   Plan: { PLAN_LOCK_IN: "Ignition" },
   Ignition: { IGNITION_DONE: "Engage" },
   Engage: {
-    MINIGAME_START: "MiniGame",
     ENGAGE_NEXT: "Maintenance",
   },
-  MiniGame: { MINIGAME_COMPLETE: "Engage" },
   Maintenance: {
     MAINTENANCE_RESOLVE: "Plan",
     ENGAGE_NEXT: "GameOver",

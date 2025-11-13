@@ -40,10 +40,17 @@ type PendingItemEffect = {
   deltaShip: number;
 };
 
-type ActiveMinigame = {
-  player: Player;
-  item: ItemInstance;
-};
+type ActiveMinigame =
+  | {
+      mode: "job";
+      player: Player;
+      item: ItemInstance;
+    }
+  | {
+      mode: "item";
+      player: Player;
+      item: ItemInstance;
+    };
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const CARD_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -71,12 +78,12 @@ const App: React.FC = () => {
   const [clears, setClears] = React.useState(0);
   const [hand, setHand] = React.useState<number[]>([]);
   const [slotCard, setSlotCard] = React.useState<number | null>(null);
-  const [engageSeatIndex, setEngageSeatIndex] = React.useState(0);
   const [isInventoryOpen, setIsInventoryOpen] = React.useState(false);
   const [activeMinigame, setActiveMinigame] = React.useState<ActiveMinigame | null>(null);
   const [pendingItemEffect, setPendingItemEffect] = React.useState<PendingItemEffect | null>(null);
 
   const rngRef = React.useRef(createRng(Date.now()));
+  const jobMinigameRoundRef = React.useRef<number | null>(null);
 
   const localPlayer = players.find((player) => player.id === LOCAL_PLAYER_ID) ?? players[0];
   const isLocalSaboteur = localPlayer?.role === "Saboteur";
@@ -152,28 +159,14 @@ const App: React.FC = () => {
   }, [localPlayer, phase, players, randomCard, reactorLimit, round.cardsPlayed]);
 
   const proceedFromIgnition = React.useCallback(() => {
-    setEngageSeatIndex(0);
+    setIsInventoryOpen(false);
     setPhase("Engage");
   }, []);
 
-  const handleEngagePass = React.useCallback(() => {
-    if (phase !== "Engage") return;
-    setIsInventoryOpen(false);
-    setEngageSeatIndex((index) => {
-      const next = index + 1;
-      if (next >= players.length) {
-        setPhase("Maintenance");
-        return index;
-      }
-      return next;
-    });
-  }, [phase, players.length]);
-
-  const handlePlayEngageItem = React.useCallback(
-    (player: Player, item: ItemInstance) => {
-      if (phase !== "Engage" || item.used || player.id !== localPlayer?.id) return;
+  const startMinigame = React.useCallback(
+    (player: Player, item: ItemInstance, mode: ActiveMinigame["mode"]) => {
       const effect = applyItem({
-        round,
+        round: { totalAfterItems: round.totalAfterItems, gate: round.gate },
         itemId: item.id,
         context: { isBelowGate: round.totalAfterItems < round.gate },
       });
@@ -183,10 +176,24 @@ const App: React.FC = () => {
         deltaTotal: effect.deltaTotal,
         deltaShip: effect.deltaShip,
       });
-      setActiveMinigame({ player, item });
-      setPhase("MiniGame");
+      setActiveMinigame({ mode, player, item });
     },
-    [localPlayer?.id, phase, round],
+    [round.gate, round.totalAfterItems],
+  );
+
+  const handlePlayEngageItem = React.useCallback(
+    (player: Player, item: ItemInstance) => {
+      if (
+        phase !== "Engage" ||
+        item.used ||
+        player.id !== localPlayer?.id ||
+        activeMinigame
+      ) {
+        return;
+      }
+      startMinigame(player, item, "item");
+    },
+    [activeMinigame, localPlayer?.id, phase, startMinigame],
   );
 
   const handleUseItemFromInventory = React.useCallback(
@@ -196,6 +203,19 @@ const App: React.FC = () => {
     },
     [handlePlayEngageItem, localPlayer],
   );
+
+  React.useEffect(() => {
+    if (phase !== "Engage") {
+      jobMinigameRoundRef.current = null;
+      return;
+    }
+    if (!localPlayer || activeMinigame) return;
+    if (jobMinigameRoundRef.current === round.index) return;
+    const nextJobItem = localPlayer.items.find((item) => item.timing === "Engage" && !item.used);
+    if (!nextJobItem) return;
+    jobMinigameRoundRef.current = round.index;
+    startMinigame(localPlayer, nextJobItem, "job");
+  }, [activeMinigame, localPlayer, phase, round.index, startMinigame]);
 
   const handleMinigameComplete = React.useCallback(
     (result: MinigameResult) => {
@@ -234,20 +254,13 @@ const App: React.FC = () => {
             : player,
         ),
       );
+      const currentMode = activeMinigame?.mode ?? "item";
       setActiveMinigame(null);
-      setTimeout(() => {
-        setPhase("Engage");
-        setEngageSeatIndex((idx) => {
-          const next = idx + 1;
-          if (next >= players.length) {
-            setPhase("Maintenance");
-            return idx;
-          }
-          return next;
-        });
-      }, 0);
+      if (currentMode === "job") {
+        setPhase("Maintenance");
+      }
     },
-    [pendingItemEffect, players.length],
+    [activeMinigame?.mode, pendingItemEffect],
   );
 
   const resolveMaintenance = React.useCallback(() => {
@@ -286,7 +299,6 @@ const App: React.FC = () => {
     const nextRoundIndex = roundIndex + 1;
     setRoundIndex(nextRoundIndex);
     setRound(createInitialRound(nextRoundIndex, players));
-    setEngageSeatIndex(0);
     dealHand();
     setPhase("Plan");
   }, [clears, dealHand, overloads, players, reactorLimit, round, roundIndex, shipHealth01]);
@@ -305,7 +317,6 @@ const App: React.FC = () => {
     setSlotCard(null);
     setPhase("Lobby");
     setIsInventoryOpen(false);
-    setEngageSeatIndex(0);
     setActiveMinigame(null);
     setPendingItemEffect(null);
   }, []);
@@ -353,9 +364,6 @@ const App: React.FC = () => {
         case "ignition.proceed":
           proceedFromIgnition();
           break;
-        case "engage.pass":
-          handleEngagePass();
-          break;
         case "maintenance.resolve":
           resolveMaintenance();
           break;
@@ -368,7 +376,6 @@ const App: React.FC = () => {
     },
     [
       handleChooseCard,
-      handleEngagePass,
       localPlayer,
       proceedFromIgnition,
       proceedFromPlan,
@@ -388,7 +395,6 @@ const App: React.FC = () => {
     clears,
     hand,
     slotCard,
-    engageSeatIndex,
   };
 
   const helpers: PhaseUIHelpers = {
@@ -408,13 +414,19 @@ const App: React.FC = () => {
   const renderMinigame = () => {
     if (!activeMinigame) return null;
     const MinigameComponent = getMinigameForJob(activeMinigame.player.job);
+    const modeLabel = activeMinigame.mode === "job" ? "Station Operation" : "Item Calibration";
+    const minigameKey = `${activeMinigame.player.id}-${activeMinigame.item.id}-${round.index}-${activeMinigame.mode}`;
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-slate-950/95 z-30 rounded-2xl p-4">
         <div className="w-full max-w-xl bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl">
-          <div className="text-xs text-slate-300 mb-2">
-            {activeMinigame.player.name} · {jobLabel(activeMinigame.player.job)} · {activeMinigame.item.name}
+          <div className="flex justify-between items-center text-xs text-slate-300 mb-2">
+            <span>
+              {activeMinigame.player.name} · {jobLabel(activeMinigame.player.job)} · {activeMinigame.item.name}
+            </span>
+            <span className="text-[10px] uppercase tracking-wide text-emerald-300">{modeLabel}</span>
           </div>
           <MinigameComponent
+            key={minigameKey}
             reactorEnergy={round.reactorEnergy01}
             shipHealth={shipHealth01}
             onComplete={(tier: MinigameTier, score01: number, deltaTotal = 0, deltaShipHealth01 = 0) =>
@@ -482,7 +494,7 @@ const App: React.FC = () => {
             />
           )}
 
-          {phase === "MiniGame" && renderMinigame()}
+          {activeMinigame && renderMinigame()}
         </div>
       </div>
     </div>
