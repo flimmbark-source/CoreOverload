@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { applyItem } from "./src/game/actions/items";
 
 // Core Collapse — Mobile Game Flow (compact, deck-of-9 with 5-card hand)
 // Single-device prototype of one player's phone, with inventory tab & item tooltips.
@@ -63,6 +64,13 @@ type RoundState = {
   reactorEnergy01: number;
   outcome: RoundOutcome;
   minigameResults: MinigameResult[];
+};
+
+type PendingItemEffect = {
+  playerId: string;
+  itemId: ItemId;
+  deltaTotal: number;
+  deltaShip: number;
 };
 
 const LOCAL_PLAYER_ID = "p1";
@@ -501,6 +509,7 @@ const CoreCollapseGame: React.FC = () => {
 
   const [engageSeatIndex, setEngageSeatIndex] = useState(0);
   const [activeMinigame, setActiveMinigame] = useState<null | { player: Player; item: ItemInstance }>(null);
+  const [pendingItemEffect, setPendingItemEffect] = useState<PendingItemEffect | null>(null);
 
   // --- Phase transitions ---
 
@@ -562,6 +571,17 @@ const CoreCollapseGame: React.FC = () => {
 
   const handlePlayEngageItem = (player: Player, item: ItemInstance) => {
     if (phase !== "Engage" || item.used || player.id !== localPlayer.id) return;
+    const effect = applyItem({
+      round,
+      itemId: item.id,
+      context: { isBelowGate: round.totalAfterItems < round.gate },
+    });
+    setPendingItemEffect({
+      playerId: player.id,
+      itemId: item.id,
+      deltaTotal: effect.deltaTotal,
+      deltaShip: effect.deltaShip,
+    });
     setActiveMinigame({ player, item });
     setPhase("MiniGame");
   };
@@ -571,16 +591,28 @@ const CoreCollapseGame: React.FC = () => {
   };
 
   const handleMinigameComplete = (result: MinigameResult) => {
+    const effect =
+      pendingItemEffect &&
+      pendingItemEffect.playerId === result.playerId &&
+      pendingItemEffect.itemId === result.itemId
+        ? pendingItemEffect
+        : { deltaTotal: result.deltaTotal, deltaShip: result.deltaShipHealth01 };
+    setPendingItemEffect(null);
+    const adjustedResult: MinigameResult = {
+      ...result,
+      deltaTotal: effect.deltaTotal,
+      deltaShipHealth01: effect.deltaShip,
+    };
     setRound((prev) => ({
       ...prev,
-      totalAfterItems: prev.totalAfterItems + result.deltaTotal,
-      minigameResults: [...prev.minigameResults, result],
+      totalAfterItems: prev.totalAfterItems + adjustedResult.deltaTotal,
+      minigameResults: [...prev.minigameResults, adjustedResult],
     }));
-    setShipHealth01((prev) => clamp01(prev + result.deltaShipHealth01));
+    setShipHealth01((prev) => clamp01(prev + adjustedResult.deltaShipHealth01));
     setPlayers((prev) =>
       prev.map((p) =>
-        p.id === result.playerId
-          ? { ...p, items: p.items.map((it) => (it.id === result.itemId ? { ...it, used: true } : it)) }
+        p.id === adjustedResult.playerId
+          ? { ...p, items: p.items.map((it) => (it.id === adjustedResult.itemId ? { ...it, used: true } : it)) }
           : p
       )
     );
