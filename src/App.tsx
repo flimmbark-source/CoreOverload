@@ -84,6 +84,7 @@ const App: React.FC = () => {
 
   const rngRef = React.useRef(createRng(Date.now()));
   const jobMinigameRoundRef = React.useRef<number | null>(null);
+  const engageItemResetRoundRef = React.useRef<number | null>(null);
 
   const localPlayer = players.find((player) => player.id === LOCAL_PLAYER_ID) ?? players[0];
   const isLocalSaboteur = localPlayer?.role === "Saboteur";
@@ -203,6 +204,20 @@ const App: React.FC = () => {
     },
     [handlePlayEngageItem, localPlayer],
   );
+
+  React.useEffect(() => {
+    if (phase !== "Engage") return;
+    if (engageItemResetRoundRef.current === round.index) return;
+    engageItemResetRoundRef.current = round.index;
+    setPlayers((prev) =>
+      prev.map((player) => ({
+        ...player,
+        items: player.items.map((item) =>
+          item.timing === "Engage" ? { ...item, used: false } : item,
+        ),
+      })),
+    );
+  }, [phase, round.index]);
 
   React.useEffect(() => {
     if (phase !== "Engage") {
