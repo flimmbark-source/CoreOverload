@@ -1,6 +1,7 @@
 import React from "react";
 import { applyItem } from "./game/actions/items";
 import type {
+  ItemId,
   ItemInstance,
   Job,
   MinigameResult,
@@ -33,24 +34,21 @@ import { RoundHeader } from "./ui/atoms/RoundHeader";
 import { energyLabel, jobLabel } from "./ui/helpers";
 import { getMinigameForJob } from "./minigames/registry";
 
-type PendingItemEffect = {
-  playerId: string;
-  itemId: ItemInstance["id"];
-  deltaTotal: number;
-  deltaShip: number;
+type ActiveMinigame = {
+  player: Player;
 };
 
-type ActiveMinigame =
-  | {
-      mode: "job";
-      player: Player;
-      item: ItemInstance;
-    }
-  | {
-      mode: "item";
-      player: Player;
-      item: ItemInstance;
-    };
+const JOB_MINIGAME_ITEM_ID: Record<Job, ItemId> = {
+  PowerEngineer: "BOOST",
+  CoolantTech: "VENT",
+  FluxSpecialist: "EQUALIZER",
+};
+
+const JOB_MINIGAME_NAME: Record<Job, string> = {
+  PowerEngineer: "Reactor Tuning",
+  CoolantTech: "Coolant Balancing",
+  FluxSpecialist: "Flux Equalization",
+};
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const CARD_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -80,7 +78,6 @@ const App: React.FC = () => {
   const [slotCard, setSlotCard] = React.useState<number | null>(null);
   const [isInventoryOpen, setIsInventoryOpen] = React.useState(false);
   const [activeMinigame, setActiveMinigame] = React.useState<ActiveMinigame | null>(null);
-  const [pendingItemEffect, setPendingItemEffect] = React.useState<PendingItemEffect | null>(null);
 
   const rngRef = React.useRef(createRng(Date.now()));
   const jobMinigameRoundRef = React.useRef<number | null>(null);
@@ -163,23 +160,9 @@ const App: React.FC = () => {
     setPhase("Engage");
   }, []);
 
-  const startMinigame = React.useCallback(
-    (player: Player, item: ItemInstance, mode: ActiveMinigame["mode"]) => {
-      const effect = applyItem({
-        round: { totalAfterItems: round.totalAfterItems, gate: round.gate },
-        itemId: item.id,
-        context: { isBelowGate: round.totalAfterItems < round.gate },
-      });
-      setPendingItemEffect({
-        playerId: player.id,
-        itemId: item.id,
-        deltaTotal: effect.deltaTotal,
-        deltaShip: effect.deltaShip,
-      });
-      setActiveMinigame({ mode, player, item });
-    },
-    [round.gate, round.totalAfterItems],
-  );
+  const startJobMinigame = React.useCallback((player: Player) => {
+    setActiveMinigame({ player });
+  }, []);
 
   const handlePlayEngageItem = React.useCallback(
     (player: Player, item: ItemInstance) => {
@@ -191,9 +174,41 @@ const App: React.FC = () => {
       ) {
         return;
       }
-      startMinigame(player, item, "item");
+
+      const effect = applyItem({
+        round: { totalAfterItems: round.totalAfterItems, gate: round.gate },
+        itemId: item.id,
+        context: { isBelowGate: round.totalAfterItems < round.gate },
+      });
+
+      const result: MinigameResult = {
+        playerId: player.id,
+        job: player.job,
+        itemId: item.id,
+        tier: "success",
+        score01: 1,
+        deltaTotal: effect.deltaTotal,
+        deltaShipHealth01: effect.deltaShip,
+      };
+
+      setRound((prev) => ({
+        ...prev,
+        totalAfterItems: prev.totalAfterItems + result.deltaTotal,
+        minigameResults: [...prev.minigameResults, result],
+      }));
+      setShipHealth01((prev) => clamp01(prev + result.deltaShipHealth01));
+      setPlayers((prev) =>
+        prev.map((p) =>
+          p.id === player.id
+            ? {
+                ...p,
+                items: p.items.map((it) => (it.id === item.id ? { ...it, used: true } : it)),
+              }
+            : p,
+        ),
+      );
     },
-    [activeMinigame, localPlayer?.id, phase, startMinigame],
+    [activeMinigame, localPlayer?.id, phase, round.gate, round.totalAfterItems],
   );
 
   const handleUseItemFromInventory = React.useCallback(
@@ -211,27 +226,22 @@ const App: React.FC = () => {
     }
     if (!localPlayer || activeMinigame) return;
     if (jobMinigameRoundRef.current === round.index) return;
-    const nextJobItem = localPlayer.items.find((item) => item.timing === "Engage" && !item.used);
-    if (!nextJobItem) return;
     jobMinigameRoundRef.current = round.index;
-    startMinigame(localPlayer, nextJobItem, "job");
-  }, [activeMinigame, localPlayer, phase, round.index, startMinigame]);
+    startJobMinigame(localPlayer);
+  }, [activeMinigame, localPlayer, phase, round.index, startJobMinigame]);
 
   const handleMinigameComplete = React.useCallback(
     (result: MinigameResult) => {
-      const fallbackDelta = result.deltaTotal ?? 0;
-      const fallbackShip = result.deltaShipHealth01 ?? 0;
-      const effect =
-        pendingItemEffect &&
-        pendingItemEffect.playerId === result.playerId &&
-        pendingItemEffect.itemId === result.itemId
-          ? pendingItemEffect
-          : { deltaTotal: fallbackDelta, deltaShip: fallbackShip };
-
-      setPendingItemEffect(null);
+      const jobItemId = JOB_MINIGAME_ITEM_ID[result.job];
+      const effect = applyItem({
+        round: { totalAfterItems: round.totalAfterItems, gate: round.gate },
+        itemId: jobItemId,
+        context: { isBelowGate: round.totalAfterItems < round.gate },
+      });
 
       const adjustedResult: MinigameResult = {
         ...result,
+        itemId: jobItemId,
         deltaTotal: effect.deltaTotal,
         deltaShipHealth01: effect.deltaShip,
       };
@@ -242,25 +252,10 @@ const App: React.FC = () => {
         minigameResults: [...prev.minigameResults, adjustedResult],
       }));
       setShipHealth01((prev) => clamp01(prev + adjustedResult.deltaShipHealth01));
-      setPlayers((prev) =>
-        prev.map((player) =>
-          player.id === adjustedResult.playerId
-            ? {
-                ...player,
-                items: player.items.map((it) =>
-                  it.id === adjustedResult.itemId ? { ...it, used: true } : it,
-                ),
-              }
-            : player,
-        ),
-      );
-      const currentMode = activeMinigame?.mode ?? "item";
       setActiveMinigame(null);
-      if (currentMode === "job") {
-        setPhase("Maintenance");
-      }
+      setPhase("Maintenance");
     },
-    [activeMinigame?.mode, pendingItemEffect],
+    [round.gate, round.totalAfterItems],
   );
 
   const resolveMaintenance = React.useCallback(() => {
@@ -326,7 +321,6 @@ const App: React.FC = () => {
     setPhase("Lobby");
     setIsInventoryOpen(false);
     setActiveMinigame(null);
-    setPendingItemEffect(null);
   }, []);
 
   const dispatchEvent = React.useCallback<PhaseUIDispatch>(
@@ -421,17 +415,18 @@ const App: React.FC = () => {
 
   const renderMinigame = () => {
     if (!activeMinigame) return null;
-    const MinigameComponent = getMinigameForJob(activeMinigame.player.job);
-    const modeLabel = activeMinigame.mode === "job" ? "Station Operation" : "Item Calibration";
-    const minigameKey = `${activeMinigame.player.id}-${activeMinigame.item.id}-${round.index}-${activeMinigame.mode}`;
+    const player = activeMinigame.player;
+    const MinigameComponent = getMinigameForJob(player.job);
+    const minigameKey = `${player.id}-${player.job}-${round.index}`;
+    const abilityName = JOB_MINIGAME_NAME[player.job];
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-slate-950/95 z-30 rounded-2xl p-4">
         <div className="w-full max-w-xl bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl">
           <div className="flex justify-between items-center text-xs text-slate-300 mb-2">
             <span>
-              {activeMinigame.player.name} · {jobLabel(activeMinigame.player.job)} · {activeMinigame.item.name}
+              {player.name} · {jobLabel(player.job)} · {abilityName}
             </span>
-            <span className="text-[10px] uppercase tracking-wide text-emerald-300">{modeLabel}</span>
+            <span className="text-[10px] uppercase tracking-wide text-emerald-300">Station Operation</span>
           </div>
           <MinigameComponent
             key={minigameKey}
@@ -439,9 +434,9 @@ const App: React.FC = () => {
             shipHealth={shipHealth01}
             onComplete={(tier: MinigameTier, score01: number, deltaTotal = 0, deltaShipHealth01 = 0) =>
               handleMinigameComplete({
-                playerId: activeMinigame.player.id,
-                job: activeMinigame.player.job,
-                itemId: activeMinigame.item.id,
+                playerId: player.id,
+                job: player.job,
+                itemId: JOB_MINIGAME_ITEM_ID[player.job],
                 tier,
                 score01,
                 deltaTotal,
