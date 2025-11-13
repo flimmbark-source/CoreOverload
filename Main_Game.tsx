@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type {
   ItemInstance,
   Job,
@@ -11,6 +11,7 @@ import type {
   RoundState,
 } from "./src/game/types";
 import { nextPhase } from "./src/game/state/machine";
+import { createRng, shuffleArray, type Rng } from "./src/game/rng";
 import { InventoryPanel } from "./src/ui/inventory/InventoryPanel";
 import { InventoryTabButton } from "./src/ui/inventory/InventoryTabButton";
 import {
@@ -43,7 +44,7 @@ const LOCAL_PLAYER_ID = "p1";
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
-const randomCard = (deckSize: number) => 1 + Math.floor(Math.random() * deckSize);
+const randomCard = (deckSize: number, rng: Rng) => 1 + Math.floor(rng.next() * deckSize);
 
 const computeGate = (index: number, players: Player[], balance: BalanceConfig) => {
   const base = balance.gateBasePerPlayer * players.length;
@@ -237,10 +238,13 @@ const CoreCollapseGame: React.FC = () => {
   // Deck-of-9 → draw 5 hand per round
   const [hand, setHand] = useState<number[]>([]);
   const [slotCard, setSlotCard] = useState<number | null>(null);
+  const rng = useMemo(() => createRng(roundIndex + players.length), [roundIndex, players.length]);
 
   const dealHand = () => {
-    const cards = Array.from({ length: balanceConfig.deckSize }, (_, i) => i + 1);
-    cards.sort(() => Math.random() - 0.5);
+    const cards = shuffleArray(
+      Array.from({ length: balanceConfig.deckSize }, (_, i) => i + 1),
+      rng
+    );
     const nextHandSize = Math.min(balanceConfig.handSize, cards.length);
     setHand(cards.slice(0, nextHandSize));
     setSlotCard(null);
@@ -294,7 +298,7 @@ const CoreCollapseGame: React.FC = () => {
     const updatedCards: Record<string, number | null> = { ...round.cardsPlayed };
     players.forEach((p) => {
       if (updatedCards[p.id] == null) {
-        updatedCards[p.id] = randomCard(balanceConfig.deckSize);
+        updatedCards[p.id] = randomCard(balanceConfig.deckSize, rng);
       }
     });
 
