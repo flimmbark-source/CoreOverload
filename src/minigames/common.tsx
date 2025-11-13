@@ -4,7 +4,12 @@ import type { MinigameTier } from "../game/types";
 export interface MinigameProps {
   reactorEnergy: number;
   shipHealth: number;
-  onComplete: (tier: MinigameTier, score01: number) => void;
+  onComplete: (
+    tier: MinigameTier,
+    score01: number,
+    deltaTotal?: number,
+    deltaShipHealth01?: number,
+  ) => void;
 }
 
 export const MinigameCard: React.FC<{
