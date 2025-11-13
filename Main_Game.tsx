@@ -11,6 +11,7 @@ import type {
   RoundOutcome,
   RoundState,
 } from "./src/game/types";
+import { nextPhase } from "./src/game/state/machine";
 
 // Core Collapse — Mobile Game Flow (compact, deck-of-9 with 5-card hand)
 // Single-device prototype of one player's phone, with inventory tab & item tooltips.
@@ -452,13 +453,17 @@ const CoreCollapseGame: React.FC = () => {
   const [engageSeatIndex, setEngageSeatIndex] = useState(0);
   const [activeMinigame, setActiveMinigame] = useState<null | { player: Player; item: ItemInstance }>(null);
 
+  const transitionPhase = (event: string) => {
+    setPhase((prev) => nextPhase(prev, event));
+  };
+
   // --- Phase transitions ---
 
-  const startGame = () => setPhase("RoleReveal");
+  const startGame = () => transitionPhase("START");
 
   const proceedFromRoleReveal = () => {
     dealHand();
-    setPhase("Plan");
+    transitionPhase("START");
   };
 
   const handleChooseCard = (value: number) => {
@@ -493,12 +498,12 @@ const CoreCollapseGame: React.FC = () => {
       reactorEnergy01: energy,
     }));
 
-    setPhase("Ignition");
+    transitionPhase("PLAN_LOCK_IN");
   };
 
   const proceedFromIgnition = () => {
     setEngageSeatIndex(0);
-    setPhase("Engage");
+    transitionPhase("IGNITION_DONE");
   };
 
   const currentEngagePlayer = phase === "Engage" ? players.find((p) => p.seatIndex === engageSeatIndex) ?? null : null;
@@ -506,14 +511,14 @@ const CoreCollapseGame: React.FC = () => {
   const handleEngagePass = () => {
     if (phase !== "Engage") return;
     const next = engageSeatIndex + 1;
-    if (next >= players.length) setPhase("Maintenance");
+    if (next >= players.length) transitionPhase("ENGAGE_NEXT");
     else setEngageSeatIndex(next);
   };
 
   const handlePlayEngageItem = (player: Player, item: ItemInstance) => {
     if (phase !== "Engage" || item.used || player.id !== localPlayer.id) return;
     setActiveMinigame({ player, item });
-    setPhase("MiniGame");
+    transitionPhase("MINIGAME_START");
   };
 
   const handleUseItemFromInventory = (item: ItemInstance) => {
@@ -536,11 +541,11 @@ const CoreCollapseGame: React.FC = () => {
     );
     setActiveMinigame(null);
     setTimeout(() => {
-      setPhase("Engage");
+      transitionPhase("MINIGAME_COMPLETE");
       setEngageSeatIndex((idx) => {
         const next = idx + 1;
         if (next >= players.length) {
-          setPhase("Maintenance");
+          transitionPhase("ENGAGE_NEXT");
           return idx;
         }
         return next;
@@ -577,7 +582,7 @@ const CoreCollapseGame: React.FC = () => {
     setRound((prev) => ({ ...prev, outcome }));
 
     if (newOverloads >= 2 || roundIndex >= 6) {
-      setPhase("GameOver");
+      transitionPhase("ENGAGE_NEXT");
       return;
     }
 
@@ -585,7 +590,7 @@ const CoreCollapseGame: React.FC = () => {
     setRoundIndex(nextRoundIndex);
     setRound(createInitialRound(nextRoundIndex, reactorLimit, players));
     dealHand();
-    setPhase("Plan");
+    transitionPhase("MAINTENANCE_RESOLVE");
   };
 
   // --- Minigame router ---
@@ -935,7 +940,7 @@ const CoreCollapseGame: React.FC = () => {
             setRound(createInitialRound(1, 6 * newPlayers.length, newPlayers));
             setHand([]);
             setSlotCard(null);
-            setPhase("Lobby");
+            transitionPhase("RESTART");
             setIsInventoryOpen(false);
           }}
           className="px-4 py-2 rounded-lg bg-slate-800 text-sm font-semibold border border-slate-600"
