@@ -1,69 +1,19 @@
 import React, { useState } from "react";
+import type {
+  ItemId,
+  ItemInstance,
+  Job,
+  MinigameResult,
+  MinigameTier,
+  Phase,
+  Player,
+  Role,
+  RoundOutcome,
+  RoundState,
+} from "./src/game/types";
 
 // Core Collapse — Mobile Game Flow (compact, deck-of-9 with 5-card hand)
 // Single-device prototype of one player's phone, with inventory tab & item tooltips.
-
-// --- Types ---
-
-type Role = "Crew" | "Saboteur";
-
-type Job = "PowerEngineer" | "CoolantTech" | "FluxSpecialist";
-
-type Phase =
-  | "Lobby"
-  | "RoleReveal"
-  | "Plan"
-  | "Ignition"
-  | "Engage"
-  | "MiniGame"
-  | "Maintenance"
-  | "GameOver";
-
-type ItemTiming = "Plan" | "Engage";
-
-type ItemId = "BOOST" | "VENT" | "EQUALIZER";
-
-type ItemInstance = {
-  id: ItemId;
-  name: string;
-  timing: ItemTiming;
-  job: Job;
-  used: boolean;
-};
-
-type Player = {
-  id: string;
-  name: string;
-  seatIndex: number;
-  role: Role;
-  job: Job;
-  items: ItemInstance[];
-};
-
-type MinigameTier = "fail" | "partial" | "success";
-
-type MinigameResult = {
-  playerId: string;
-  job: Job;
-  itemId: ItemId;
-  tier: MinigameTier;
-  score01: number;
-  deltaTotal: number;
-  deltaShipHealth01: number;
-};
-
-type RoundOutcome = "Clear" | "Fail" | "Overload" | null;
-
-type RoundState = {
-  index: number;
-  gate: number;
-  cardsPlayed: Record<string, number | null>;
-  totalBeforeItems: number;
-  totalAfterItems: number;
-  reactorEnergy01: number;
-  outcome: RoundOutcome;
-  minigameResults: MinigameResult[];
-};
 
 const LOCAL_PLAYER_ID = "p1";
 
