@@ -1,0 +1,15 @@
+{
+  "roundsMax": 6,
+  "overloadLoss": 0.3,
+  "failLoss": 0.1,
+  "allSuccessGain": 0.05,
+  "deckSize": 9,
+  "handSize": 5,
+  "gateBasePerPlayer": 4,
+  "gateOffsets": [-2, -1, 0, 1, 2],
+  "items": {
+    "BOOST": {"deltaTotal": 3, "deltaShip": 0},
+    "VENT":  {"deltaTotal": -3, "deltaShip": 0.05},
+    "EQUALIZER": {"belowGate": 2, "otherwise": -2, "deltaShip": 0}
+  }
+}

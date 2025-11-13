@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type {
   ItemInstance,
   Job,
@@ -26,6 +26,13 @@ import {
   type PhaseUIState,
 } from "./src/ui/phase";
 import { getMinigameForJob } from "./src/minigames/registry";
+import {
+  defaultBalanceConfig,
+  getCachedBalanceConfig,
+  getItemEffect,
+  loadBalanceConfig,
+  type BalanceConfig,
+} from "./src/game/config";
 
 // Core Collapse — Mobile Game Flow (compact, deck-of-9 with 5-card hand)
 // Single-device prototype of one player's phone, with inventory tab & item tooltips.
@@ -36,7 +43,14 @@ const LOCAL_PLAYER_ID = "p1";
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
-const randomCard = () => 1 + Math.floor(Math.random() * 9);
+const randomCard = (deckSize: number) => 1 + Math.floor(Math.random() * deckSize);
+
+const computeGate = (index: number, players: Player[], balance: BalanceConfig) => {
+  const base = balance.gateBasePerPlayer * players.length;
+  const offsets = balance.gateOffsets.length > 0 ? balance.gateOffsets : defaultBalanceConfig.gateOffsets;
+  const offset = offsets[(index - 1) % offsets.length];
+  return base + offset;
+};
 
 const createDefaultPlayers = (): Player[] => {
   const baseItems = (job: Job): ItemInstance[] => {
@@ -83,12 +97,10 @@ const createDefaultPlayers = (): Player[] => {
 const createInitialRound = (
   index: number,
   reactorLimit: number,
-  players: Player[]
+  players: Player[],
+  balance: BalanceConfig
 ): RoundState => {
-  const n = players.length;
-  const base = 4 * n;
-  const offset = [-2, -1, 0, 1, 2][(index - 1) % 5];
-  const gate = base + offset;
+  const gate = computeGate(index, players, balance);
 
   const cardsPlayed: Record<string, number | null> = {};
   players.forEach((p) => {
@@ -203,6 +215,7 @@ const RoundHeader: React.FC<RoundHeaderProps> = ({ gate, reactorLimit, shipHealt
 // --- Main component ---
 
 const CoreCollapseGame: React.FC = () => {
+  const [balanceConfig, setBalanceConfig] = useState<BalanceConfig>(() => getCachedBalanceConfig());
   const [phase, setPhase] = useState<Phase>("Lobby");
   const [players, setPlayers] = useState<Player[]>(createDefaultPlayers);
 
@@ -212,7 +225,9 @@ const CoreCollapseGame: React.FC = () => {
   const [overloads, setOverloads] = useState(0);
   const [clears, setClears] = useState(0);
 
-  const [round, setRound] = useState<RoundState>(() => createInitialRound(1, reactorLimit, players));
+  const [round, setRound] = useState<RoundState>(() =>
+    createInitialRound(1, 6 * 3, createDefaultPlayers(), getCachedBalanceConfig())
+  );
 
   const localPlayer = players.find((p) => p.id === LOCAL_PLAYER_ID) ?? players[0];
   const isLocalSaboteur = localPlayer.role === "Saboteur";
@@ -224,9 +239,10 @@ const CoreCollapseGame: React.FC = () => {
   const [slotCard, setSlotCard] = useState<number | null>(null);
 
   const dealHand = () => {
-    const cards = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const cards = Array.from({ length: balanceConfig.deckSize }, (_, i) => i + 1);
     cards.sort(() => Math.random() - 0.5);
-    setHand(cards.slice(0, 5));
+    const nextHandSize = Math.min(balanceConfig.handSize, cards.length);
+    setHand(cards.slice(0, nextHandSize));
     setSlotCard(null);
     setRound((prev) => ({ ...prev, cardsPlayed: { ...prev.cardsPlayed, [localPlayer.id]: null } }));
   };
@@ -237,6 +253,18 @@ const CoreCollapseGame: React.FC = () => {
   const transitionPhase = (event: string) => {
     setPhase((prev) => nextPhase(prev, event));
   };
+
+  useEffect(() => {
+    loadBalanceConfig().then(setBalanceConfig).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setRound((prev) => ({
+      ...prev,
+      gate: computeGate(prev.index, players, balanceConfig),
+    }));
+    // TODO: Rebuild hands/limit if future configs alter deck math mid-run.
+  }, [balanceConfig, players]);
 
   // --- Phase transitions ---
 
@@ -265,7 +293,9 @@ const CoreCollapseGame: React.FC = () => {
 
     const updatedCards: Record<string, number | null> = { ...round.cardsPlayed };
     players.forEach((p) => {
-      if (updatedCards[p.id] == null) updatedCards[p.id] = randomCard();
+      if (updatedCards[p.id] == null) {
+        updatedCards[p.id] = randomCard(balanceConfig.deckSize);
+      }
     });
 
     const total = Object.values(updatedCards).reduce((sum, v) => sum + (v ?? 0), 0);
@@ -304,13 +334,7 @@ const CoreCollapseGame: React.FC = () => {
     handlePlayEngageItem(localPlayer, item);
   };
 
-  const handleMinigameComplete = (result: MinigameResult) => {
-    setRound((prev) => ({
-      ...prev,
-      totalAfterItems: prev.totalAfterItems + result.deltaTotal,
-      minigameResults: [...prev.minigameResults, result],
-    }));
-    setShipHealth01((prev) => clamp01(prev + result.deltaShipHealth01));
+  const finalizeMinigame = (result: MinigameResult) => {
     setPlayers((prev) =>
       prev.map((p) =>
         p.id === result.playerId
@@ -332,6 +356,35 @@ const CoreCollapseGame: React.FC = () => {
     }, 0);
   };
 
+  const handleMinigameComplete = (tier: MinigameTier, score01: number) => {
+    if (!activeMinigame) return;
+    const { player, item } = activeMinigame;
+    const { deltaTotal, deltaShipHealth01 } = getItemEffect({
+      itemId: item.id,
+      tier,
+      isBelowGate: round.totalAfterItems < round.gate,
+      balance: balanceConfig,
+    });
+
+    const result: MinigameResult = {
+      playerId: player.id,
+      job: player.job,
+      itemId: item.id,
+      tier,
+      score01,
+      deltaTotal,
+      deltaShipHealth01,
+    };
+
+    setRound((prev) => ({
+      ...prev,
+      totalAfterItems: prev.totalAfterItems + result.deltaTotal,
+      minigameResults: [...prev.minigameResults, result],
+    }));
+    setShipHealth01((prev) => clamp01(prev + result.deltaShipHealth01));
+    finalizeMinigame(result);
+  };
+
   const resolveMaintenance = () => {
     const total = round.totalAfterItems;
     let outcome: RoundOutcome;
@@ -344,14 +397,14 @@ const CoreCollapseGame: React.FC = () => {
     let newClears = clears;
 
     if (outcome === "Overload") {
-      newShip = clamp01(newShip - 0.3);
+      newShip = clamp01(newShip - balanceConfig.overloadLoss);
       newOverloads += 1;
     } else if (outcome === "Fail") {
-      newShip = clamp01(newShip - 0.1);
+      newShip = clamp01(newShip - balanceConfig.failLoss);
     } else {
       newClears += 1;
       if (round.minigameResults.every((r) => r.tier === "success")) {
-        newShip = clamp01(newShip + 0.05);
+        newShip = clamp01(newShip + balanceConfig.allSuccessGain);
       }
     }
 
@@ -360,14 +413,14 @@ const CoreCollapseGame: React.FC = () => {
     setClears(newClears);
     setRound((prev) => ({ ...prev, outcome }));
 
-    if (newOverloads >= 2 || roundIndex >= 6) {
+    if (newOverloads >= 2 || roundIndex >= balanceConfig.roundsMax) {
       transitionPhase("ENGAGE_NEXT");
       return;
     }
 
     const nextRoundIndex = roundIndex + 1;
     setRoundIndex(nextRoundIndex);
-    setRound(createInitialRound(nextRoundIndex, reactorLimit, players));
+    setRound(createInitialRound(nextRoundIndex, reactorLimit, players, balanceConfig));
     dealHand();
     transitionPhase("MAINTENANCE_RESOLVE");
   };
@@ -381,7 +434,7 @@ const CoreCollapseGame: React.FC = () => {
     setOverloads(0);
     setClears(0);
     setRoundIndex(1);
-    setRound(createInitialRound(1, limit, newPlayers));
+    setRound(createInitialRound(1, limit, newPlayers, balanceConfig));
     setHand([]);
     setSlotCard(null);
     transitionPhase("RESTART");
@@ -432,22 +485,8 @@ const CoreCollapseGame: React.FC = () => {
     if (!activeMinigame) return null;
     const { player, item } = activeMinigame;
 
-    const onComplete = (
-      tier: MinigameTier,
-      score01: number,
-      deltaTotal: number,
-      deltaShipHealth01: number = 0
-    ) => {
-      const result: MinigameResult = {
-        playerId: player.id,
-        job: player.job,
-        itemId: item.id,
-        tier,
-        score01,
-        deltaTotal,
-        deltaShipHealth01,
-      };
-      handleMinigameComplete(result);
+    const onComplete = (tier: MinigameTier, score01: number) => {
+      handleMinigameComplete(tier, score01);
     };
 
     const common = {
