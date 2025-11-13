@@ -2,7 +2,7 @@ import type { ItemInstance, Job, Player, RoundState } from "./types";
 
 export const LOCAL_PLAYER_ID = "p1";
 
-const createJobItems = (job: Job): ItemInstance[] => {
+export const createJobItems = (job: Job): ItemInstance[] => {
   switch (job) {
     case "PowerEngineer":
       return [{ id: "BOOST", name: "BOOST", timing: "Engage", job, used: false }];

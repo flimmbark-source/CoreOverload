@@ -40,7 +40,7 @@ const Ignition: React.FC<PhaseComponentProps> = ({ state, dispatchEvent, localPl
       </div>
       <div className="flex justify-end">
         <button onClick={() => dispatchEvent("ignition.proceed")} className="px-4 py-2 rounded-lg bg-emerald-600 text-sm font-semibold">
-          Proceed to Items
+          Proceed to Job
         </button>
       </div>
     </div>
