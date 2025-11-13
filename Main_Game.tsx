@@ -12,6 +12,18 @@ import type {
   RoundState,
 } from "./src/game/types";
 import { nextPhase } from "./src/game/state/machine";
+import {
+  EngagePhase,
+  GameOverPhase,
+  IgnitionPhase,
+  LobbyPhase,
+  MaintenancePhase,
+  PlanPhase,
+  RoleRevealPhase,
+  type PhaseUIDispatch,
+  type PhaseUIHelpers,
+  type PhaseUIState,
+} from "./src/ui/phase";
 
 // Core Collapse — Mobile Game Flow (compact, deck-of-9 with 5-card hand)
 // Single-device prototype of one player's phone, with inventory tab & item tooltips.
@@ -433,7 +445,6 @@ const CoreCollapseGame: React.FC = () => {
   const [round, setRound] = useState<RoundState>(() => createInitialRound(1, reactorLimit, players));
 
   const localPlayer = players.find((p) => p.id === LOCAL_PLAYER_ID) ?? players[0];
-  const otherPlayers = players.filter((p) => p.id !== localPlayer.id);
   const isLocalSaboteur = localPlayer.role === "Saboteur";
 
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
@@ -505,8 +516,6 @@ const CoreCollapseGame: React.FC = () => {
     setEngageSeatIndex(0);
     transitionPhase("IGNITION_DONE");
   };
-
-  const currentEngagePlayer = phase === "Engage" ? players.find((p) => p.seatIndex === engageSeatIndex) ?? null : null;
 
   const handleEngagePass = () => {
     if (phase !== "Engage") return;
@@ -593,6 +602,60 @@ const CoreCollapseGame: React.FC = () => {
     transitionPhase("MAINTENANCE_RESOLVE");
   };
 
+  const restartGame = () => {
+    const newPlayers = createDefaultPlayers();
+    setPlayers(newPlayers);
+    const limit = 6 * newPlayers.length;
+    setReactorLimit(limit);
+    setShipHealth01(1);
+    setOverloads(0);
+    setClears(0);
+    setRoundIndex(1);
+    setRound(createInitialRound(1, limit, newPlayers));
+    setHand([]);
+    setSlotCard(null);
+    transitionPhase("RESTART");
+    setIsInventoryOpen(false);
+  };
+
+  const dispatchPhaseEvent: PhaseUIDispatch = (event, payload) => {
+    switch (event) {
+      case "lobby.ready":
+        startGame();
+        break;
+      case "lobby.rename": {
+        const nextName = typeof payload === "string" && payload.trim().length > 0 ? payload : "You";
+        setPlayers((prev) =>
+          prev.map((p) => (p.id === localPlayer.id ? { ...p, name: nextName } : p))
+        );
+        break;
+      }
+      case "roleReveal.continue":
+        proceedFromRoleReveal();
+        break;
+      case "plan.chooseCard":
+        if (typeof payload === "number") handleChooseCard(payload);
+        break;
+      case "plan.lock":
+        proceedFromPlan();
+        break;
+      case "ignition.proceed":
+        proceedFromIgnition();
+        break;
+      case "engage.pass":
+        handleEngagePass();
+        break;
+      case "maintenance.resolve":
+        resolveMaintenance();
+        break;
+      case "gameOver.restart":
+        restartGame();
+        break;
+      default:
+        break;
+    }
+  };
+
   // --- Minigame router ---
 
   const renderMinigame = () => {
@@ -627,328 +690,25 @@ const CoreCollapseGame: React.FC = () => {
     return <FluxSpecialistMinigame {...common} onComplete={onComplete} />;
   };
 
-  // --- Phase UIs ---
-
-  const renderLobby = () => (
-    <div className="flex flex-col items-center gap-4">
-      <h1 className="text-2xl font-semibold">Core Collapse</h1>
-      <div className="w-full max-w-sm rounded-2xl bg-slate-950/80 border border-slate-800 p-4 flex flex-col gap-3">
-        <label className="text-xs text-slate-400 flex flex-col gap-1">
-          Callsign
-          <input
-            type="text"
-            value={localPlayer.name}
-            onChange={(e) =>
-              setPlayers((prev) =>
-                prev.map((p) => (p.id === localPlayer.id ? { ...p, name: e.target.value || "You" } : p))
-              )
-            }
-            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm"
-          />
-        </label>
-        <button onClick={startGame} className="w-full mt-2 px-4 py-2 rounded-lg bg-emerald-600 text-sm font-semibold">
-          Ready Up
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderRoleReveal = () => (
-    <div className="flex flex-col items-center gap-4">
-      <h2 className="text-xl font-semibold">Your Assignment</h2>
-      <div className="w-full max-w-sm rounded-2xl bg-slate-950/90 border border-slate-700 p-4 flex flex-col gap-2">
-        <div className="text-xs text-slate-400">Callsign</div>
-        <div className="text-lg font-semibold">{localPlayer.name}</div>
-        <div className="flex justify-between items-center mt-1">
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-slate-400">Role</div>
-            <RoleBadge role={localPlayer.role} />
-          </div>
-          <div className="text-right flex flex-col gap-1 items-end">
-            <div className="text-xs text-slate-400">Station</div>
-            <JobBadge job={localPlayer.job} />
-          </div>
-        </div>
-        <p className="text-[11px] text-slate-300 mt-2">
-          Crew: clear 4+ hazards in 6 rounds without 2 overloads. Saboteur: force 2 overloads or keep clears &lt; 4.
-        </p>
-      </div>
-      <button onClick={proceedFromRoleReveal} className="px-4 py-2 rounded-lg bg-emerald-600 text-sm font-semibold">
-        Continue to Round 1
-      </button>
-    </div>
-  );
-
-  const renderPlan = () => {
-    const localCard = round.cardsPlayed[localPlayer.id];
-    return (
-      <div className="flex flex-col gap-4 w-full max-w-md">
-        {/* Header: ONLY emojis text + Ship bar below (handled in RoundHeader) */}
-        <RoundHeader gate={round.gate} reactorLimit={reactorLimit} shipHealth={shipHealth01} />
-
-        {/* (Kept the brief helper line; previous long swap hint removed earlier) */}
-        <p className="text-[11px] text-slate-300 text-center">Draw 5 from your 1–9 deck. Place 1 into the power slot.</p>
-
-        <div className="rounded-2xl bg-slate-950/90 border border-slate-800 p-3 flex flex-col gap-3">
-          {/* Power slot centered */}
-          <div className="flex flex-col items-center">
-            <div className="text-[11px] text-slate-400">Power slot</div>
-            <div className="mt-1">
-              <div
-                className={`w-14 h-20 rounded-xl border flex items-center justify-center text-lg font-semibold ${
-                  slotCard != null
-                    ? "bg-emerald-500 text-slate-950 border-emerald-300"
-                    : "bg-slate-900 text-slate-500 border-dashed border-slate-600"
-                }`}
-              >
-                {slotCard ?? "?"}
-              </div>
-            </div>
-          </div>
-
-          {/* Hand centered */}
-          <div className="flex flex-col items-center">
-            <div className="text-[11px] text-slate-400 mb-1 text-center">Your hand</div>
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {hand.length === 0 && <span className="text-[11px] text-slate-500">Dealing…</span>}
-              {hand.map((v) => (
-                <button
-                  key={v}
-                  onClick={() => handleChooseCard(v)}
-                  className="w-10 h-14 rounded-xl border bg-slate-900 border-slate-700 text-sm flex items-center justify-center"
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5 text-[11px] text-slate-400">
-          <div className="font-semibold text-slate-200 mb-1">Crew</div>
-          {otherPlayers.map((p) => (
-            <div key={p.id} className="flex justify-between items-center">
-              <span>{p.name}</span>
-              <JobBadge job={p.job} compact />
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-end">
-          <button
-            onClick={proceedFromPlan}
-            disabled={localCard == null}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold border ${
-              localCard != null
-                ? "bg-emerald-600 border-emerald-500"
-                : "bg-slate-900 border-slate-700 text-slate-500 cursor-not-allowed"
-            }`}
-          >
-            Lock In Power
-          </button>
-        </div>
-      </div>
-    );
+  const phaseState: PhaseUIState = {
+    round,
+    roundIndex,
+    reactorLimit,
+    shipHealth01,
+    overloads,
+    clears,
+    hand,
+    slotCard,
+    engageSeatIndex,
   };
 
-  const renderIgnition = () => {
-    const total = round.totalBeforeItems;
-    const energy = round.reactorEnergy01;
-    return (
-      <div className="flex flex-col gap-4 w-full max-w-md">
-        <RoundHeader gate={round.gate} reactorLimit={reactorLimit} shipHealth={shipHealth01} />
-        <div className="rounded-2xl bg-slate-950/90 border border-slate-800 p-3 flex flex-col gap-2">
-          <div className="flex justify-between text-sm">
-            <span>Your card</span>
-            <span className="font-semibold text-emerald-400">{round.cardsPlayed[localPlayer.id]}</span>
-          </div>
-          {otherPlayers.map((p) => (
-            <div key={p.id} className="flex justify-between text-sm text-slate-200">
-              <span>{p.name}</span>
-              <span className="font-semibold">{round.cardsPlayed[p.id]}</span>
-            </div>
-          ))}
-        </div>
-        <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-3 flex justify-between items-center">
-          <div className="text-sm text-slate-200">
-            Total: <span className="font-semibold">{total}</span>
-          </div>
-          <div className="text-[11px] text-slate-400 text-right">
-            Load
-            <div className="w-24 h-2 rounded bg-slate-800 overflow-hidden mt-1">
-              <div
-                className={`h-full ${energy < 0.25 ? "bg-sky-500" : energy < 0.6 ? "bg-amber-400" : "bg-red-500"}`}
-                style={{ width: `${energy * 100}%` }}
-              />
-            </div>
-            <div className="mt-1 text-[10px] uppercase">{energyLabel(energy)}</div>
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <button onClick={proceedFromIgnition} className="px-4 py-2 rounded-lg bg-emerald-600 text-sm font-semibold">
-            Proceed to Items
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const renderEngage = () => {
-    const current = currentEngagePlayer;
-    const total = round.totalAfterItems;
-    const isLocalTurn = current?.id === localPlayer.id;
-    return (
-      <div className="flex flex-col gap-4 w-full max-w-md">
-        <RoundHeader gate={round.gate} reactorLimit={reactorLimit} shipHealth={shipHealth01} />
-        <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-3 flex justify-between items-center">
-          <div className="text-sm text-slate-200">
-            Current: <span className="font-semibold">{total}</span>
-          </div>
-          <div className="text-[11px] text-slate-400 text-right">
-            Load
-            <div className="w-24 h-2 rounded bg-slate-800 overflow-hidden mt-1">
-              <div
-                className={`h-full ${
-                  round.reactorEnergy01 < 0.25
-                    ? "bg-sky-500"
-                    : round.reactorEnergy01 < 0.6
-                    ? "bg-amber-400"
-                    : "bg-red-500"
-                }`}
-                style={{ width: `${round.reactorEnergy01 * 100}%` }}
-              />
-            </div>
-            <div className="mt-1 text-[10px] uppercase">{energyLabel(round.reactorEnergy01)}</div>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-slate-950/90 border border-slate-800 p-3 flex flex-col gap-3">
-          <div className="flex justify-between text-xs text-slate-400">
-            <span>Acting now</span>
-            <span className="text-sm text-slate-100">{current?.name ?? "—"}</span>
-          </div>
-          <p className="text-[11px] text-slate-300">
-            {isLocalTurn ? "Open your station inventory to fire one item, or pass." : `Waiting for ${current?.name ?? "crew"}...`}
-          </p>
-          {isLocalTurn && (
-            <div className="flex flex-col gap-2 mt-1">
-              <button
-                type="button"
-                onClick={() => setIsInventoryOpen(true)}
-                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-emerald-600/90 text-slate-950 border border-emerald-400 shadow"
-              >
-                Open Inventory
-              </button>
-              <span className="text-[10px] text-slate-500">Items are used from the inventory panel.</span>
-            </div>
-          )}
-        </div>
-        <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-3 text-[11px] text-slate-400">
-          <div className="font-semibold text-slate-200 mb-1">Turn order</div>
-          {players.map((p) => (
-            <div key={p.id} className="flex justify-between">
-              <span>
-                {p.seatIndex + 1}. {p.name}
-              </span>
-              <span className={p.seatIndex === engageSeatIndex ? "text-emerald-400" : "text-slate-500"}>
-                {p.seatIndex === engageSeatIndex ? "Acting" : p.items.every((it) => it.used) ? "Spent" : "Waiting"}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-end">
-          <button onClick={handleEngagePass} className="px-4 py-2 rounded-lg bg-slate-800 text-sm font-semibold">
-            {isLocalTurn ? "Pass" : "Advance"}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const renderMaintenance = () => {
-    const total = round.totalAfterItems;
-    const outcome = round.outcome;
-    const bannerColor =
-      outcome === "Overload"
-        ? "bg-red-900/60 border-red-500"
-        : outcome === "Clear"
-        ? "bg-emerald-900/60 border-emerald-500"
-        : "bg-amber-900/40 border-amber-500";
-
-    return (
-      <div className="flex flex-col gap-4 w-full max-w-md">
-        <RoundHeader gate={round.gate} reactorLimit={reactorLimit} shipHealth={shipHealth01} />
-        <div className={`rounded-2xl border p-3 ${bannerColor}`}>
-          <div className="text-sm text-slate-100">Outcome: {outcome ?? "?"}</div>
-          <div className="text-[11px] text-slate-200 mt-1">Final Total {total} (base {round.totalBeforeItems})</div>
-          <ul className="mt-2 text-[11px] text-slate-200 space-y-1">
-            {round.minigameResults.map((r, idx) => {
-              const player = players.find((p) => p.id === r.playerId);
-              return (
-                <li key={idx}>
-                  {player?.name} [{jobLabel(r.job)}] {r.itemId}: {r.tier.toUpperCase()} → {r.deltaTotal >= 0 ? "+" : ""}
-                  {r.deltaTotal}
-                  {r.deltaShipHealth01 !== 0 && (
-                    <span>
-                      {" "}/ Ship {r.deltaShipHealth01 >= 0 ? "+" : ""}
-                      {Math.round(r.deltaShipHealth01 * 100)}%
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-            {round.minigameResults.length === 0 && <li>No station items used.</li>}
-          </ul>
-        </div>
-        <div className="flex justify-end">
-          <button onClick={resolveMaintenance} className="px-4 py-2 rounded-lg bg-emerald-600 text-sm font-semibold">
-            {overloads >= 2 || roundIndex >= 6 ? "Resolve & End Game" : "Resolve & Next Round"}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const renderGameOver = () => {
-    const crewWin = clears >= 4 && overloads < 2;
-    const title = crewWin ? "Crew Victory" : "Saboteur Victory";
-    const color = crewWin ? "bg-emerald-900/60 border-emerald-500" : "bg-red-900/60 border-red-500";
-
-    return (
-      <div className="flex flex-col items-center gap-4 w-full max-w-md">
-        <div className={`w-full rounded-2xl border p-4 ${color}`}>
-          <h2 className="text-xl font-semibold mb-1">{title}</h2>
-          <p className="text-sm text-slate-100">Clears {clears} / 6 · Overloads {overloads}</p>
-        </div>
-        <div className="w-full rounded-2xl bg-slate-950/80 border border-slate-700 p-3">
-          <h3 className="text-sm font-semibold mb-1">Final roles</h3>
-          <ul className="space-y-1 text-[11px] text-slate-300">
-            {players.map((p) => (
-              <li key={p.id}>
-                {p.name} — {p.role} ({jobLabel(p.job)})
-              </li>
-            ))}
-          </ul>
-        </div>
-        <button
-          onClick={() => {
-            const newPlayers = createDefaultPlayers();
-            setPlayers(newPlayers);
-            setReactorLimit(6 * newPlayers.length);
-            setShipHealth01(1);
-            setOverloads(0);
-            setClears(0);
-            setRoundIndex(1);
-            setRound(createInitialRound(1, 6 * newPlayers.length, newPlayers));
-            setHand([]);
-            setSlotCard(null);
-            transitionPhase("RESTART");
-            setIsInventoryOpen(false);
-          }}
-          className="px-4 py-2 rounded-lg bg-slate-800 text-sm font-semibold border border-slate-600"
-        >
-          Back to Lobby
-        </button>
-      </div>
-    );
+  const phaseHelpers: PhaseUIHelpers = {
+    JobBadge,
+    RoleBadge,
+    RoundHeader,
+    jobLabel,
+    energyLabel,
+    openInventory: () => setIsInventoryOpen(true),
   };
 
   const hasUsableItems = localPlayer.items.some((it) => !it.used && phase === "Engage" && it.timing === "Engage");
@@ -975,14 +735,70 @@ const CoreCollapseGame: React.FC = () => {
         </div>
 
         <div className="relative border border-slate-800 rounded-2xl bg-slate-900/80 p-4 shadow min-h-[420px] flex items-center justify-center">
-          {phase === "Lobby" && renderLobby()}
-          {phase === "RoleReveal" && renderRoleReveal()}
-          {phase === "Plan" && renderPlan()}
-          {phase === "Ignition" && renderIgnition()}
-          {phase === "Engage" && renderEngage()}
+          {phase === "Lobby" && (
+            <LobbyPhase
+              state={phaseState}
+              dispatchEvent={dispatchPhaseEvent}
+              localPlayer={localPlayer}
+              players={players}
+              helpers={phaseHelpers}
+            />
+          )}
+          {phase === "RoleReveal" && (
+            <RoleRevealPhase
+              state={phaseState}
+              dispatchEvent={dispatchPhaseEvent}
+              localPlayer={localPlayer}
+              players={players}
+              helpers={phaseHelpers}
+            />
+          )}
+          {phase === "Plan" && (
+            <PlanPhase
+              state={phaseState}
+              dispatchEvent={dispatchPhaseEvent}
+              localPlayer={localPlayer}
+              players={players}
+              helpers={phaseHelpers}
+            />
+          )}
+          {phase === "Ignition" && (
+            <IgnitionPhase
+              state={phaseState}
+              dispatchEvent={dispatchPhaseEvent}
+              localPlayer={localPlayer}
+              players={players}
+              helpers={phaseHelpers}
+            />
+          )}
+          {phase === "Engage" && (
+            <EngagePhase
+              state={phaseState}
+              dispatchEvent={dispatchPhaseEvent}
+              localPlayer={localPlayer}
+              players={players}
+              helpers={phaseHelpers}
+            />
+          )}
           {phase === "MiniGame" && renderMinigame()}
-          {phase === "Maintenance" && renderMaintenance()}
-          {phase === "GameOver" && renderGameOver()}
+          {phase === "Maintenance" && (
+            <MaintenancePhase
+              state={phaseState}
+              dispatchEvent={dispatchPhaseEvent}
+              localPlayer={localPlayer}
+              players={players}
+              helpers={phaseHelpers}
+            />
+          )}
+          {phase === "GameOver" && (
+            <GameOverPhase
+              state={phaseState}
+              dispatchEvent={dispatchPhaseEvent}
+              localPlayer={localPlayer}
+              players={players}
+              helpers={phaseHelpers}
+            />
+          )}
 
           <InventoryTabButton hasUsableItems={hasUsableItems} isOpen={isInventoryOpen} onToggle={() => setIsInventoryOpen((open) => !open)} />
 
