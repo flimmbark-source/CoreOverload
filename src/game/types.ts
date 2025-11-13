@@ -10,7 +10,6 @@ export type Phase =
   | "Plan"
   | "Ignition"
   | "Engage"
-  | "MiniGame"
   | "Maintenance"
   | "GameOver";
 
