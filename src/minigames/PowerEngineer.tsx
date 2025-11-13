@@ -127,10 +127,6 @@ export const PowerEngineerMinigame: React.FC<MinigameProps> = ({ reactorEnergy, 
     setRunning(true);
   }, []);
 
-  React.useEffect(() => {
-    handleStart();
-  }, [handleStart]);
-
   // Main animation loop
   React.useEffect(() => {
     if (!running) return;
@@ -407,7 +403,7 @@ export const PowerEngineerMinigame: React.FC<MinigameProps> = ({ reactorEnergy, 
             : "bg-emerald-600 border-emerald-500 hover:bg-emerald-500"
         }`}
       >
-        {running ? "Stabilizing..." : "Restart Simulation"}
+        {running ? "Stabilizing..." : "Start"}
       </button>
       <div className="text-xs text-slate-400 mt-1">
         Input: {inputDir === -1 ? "Left" : inputDir === 1 ? "Right" : "Neutral"}

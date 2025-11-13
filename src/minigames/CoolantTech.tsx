@@ -147,10 +147,6 @@ export const CoolantTechMinigame: React.FC<MinigameProps> = ({
   }, []);
 
   React.useEffect(() => {
-    handleStart();
-  }, [handleStart]);
-
-  React.useEffect(() => {
     if (!running) return;
 
     const canvas = canvasRef.current;
@@ -437,7 +433,7 @@ export const CoolantTechMinigame: React.FC<MinigameProps> = ({
             : "bg-emerald-600 border-emerald-500 hover:bg-emerald-500"
         }`}
       >
-        {running ? "Stabilizing..." : "Restart Simulation"}
+        {running ? "Stabilizing..." : "Start"}
       </button>
       {lastTapSide && (
         <div className="text-xs text-slate-400 mt-1">
