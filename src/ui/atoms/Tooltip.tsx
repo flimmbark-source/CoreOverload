@@ -1,15 +1,30 @@
 import React, {
   cloneElement,
   isValidElement,
+  type FocusEvent,
+  type MouseEvent,
   type ReactElement,
   type ReactNode,
   useId,
   useState,
 } from "react";
 
+type TooltipChildEvents = {
+  onFocus?: (event: FocusEvent<HTMLElement>) => void;
+  onBlur?: (event: FocusEvent<HTMLElement>) => void;
+  onMouseEnter?: (event: MouseEvent<HTMLElement>) => void;
+  onMouseLeave?: (event: MouseEvent<HTMLElement>) => void;
+  "aria-describedby"?: string;
+};
+
+type TooltipChildElement = ReactElement<TooltipChildEvents & Record<string, unknown>>;
+
+const isTooltipChildElement = (node: ReactNode): node is TooltipChildElement =>
+  isValidElement(node);
+
 export type TooltipProps = {
   label: ReactNode;
-  children: ReactElement;
+  children: ReactNode;
   className?: string;
 };
 
@@ -20,32 +35,37 @@ export const Tooltip: React.FC<TooltipProps> = ({ label, children, className }) 
   const show = () => setVisible(true);
   const hide = () => setVisible(false);
 
-  const describedByTokens = isValidElement(children)
-    ? [children.props["aria-describedby"], tooltipId].filter(
-        (token): token is string => Boolean(token)
+  const clonableChild = isTooltipChildElement(children) ? children : null;
+
+  const describedByTokens = clonableChild
+    ? [(clonableChild.props as TooltipChildEvents)["aria-describedby"], tooltipId].filter(
+        (token): token is string => Boolean(token),
       )
     : [tooltipId];
 
-  const trigger = isValidElement(children)
-    ? cloneElement(children, {
-        onFocus: (event: React.FocusEvent<HTMLElement>) => {
-          children.props.onFocus?.(event);
-          show();
-        },
-        onBlur: (event: React.FocusEvent<HTMLElement>) => {
-          children.props.onBlur?.(event);
-          hide();
-        },
-        onMouseEnter: (event: React.MouseEvent<HTMLElement>) => {
-          children.props.onMouseEnter?.(event);
-          show();
-        },
-        onMouseLeave: (event: React.MouseEvent<HTMLElement>) => {
-          children.props.onMouseLeave?.(event);
-          hide();
-        },
-        "aria-describedby": describedByTokens.join(" "),
-      })
+  const trigger = clonableChild
+    ? cloneElement(
+        clonableChild,
+        {
+          onFocus: (event: FocusEvent<HTMLElement>) => {
+            (clonableChild.props as TooltipChildEvents).onFocus?.(event);
+            show();
+          },
+          onBlur: (event: FocusEvent<HTMLElement>) => {
+            (clonableChild.props as TooltipChildEvents).onBlur?.(event);
+            hide();
+          },
+          onMouseEnter: (event: MouseEvent<HTMLElement>) => {
+            (clonableChild.props as TooltipChildEvents).onMouseEnter?.(event);
+            show();
+          },
+          onMouseLeave: (event: MouseEvent<HTMLElement>) => {
+            (clonableChild.props as TooltipChildEvents).onMouseLeave?.(event);
+            hide();
+          },
+          "aria-describedby": describedByTokens.join(" "),
+        } satisfies TooltipChildEvents,
+      )
     : children;
 
   return (

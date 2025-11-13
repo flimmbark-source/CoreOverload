@@ -131,7 +131,10 @@ const App: React.FC = () => {
           updatedCards[player.id] = randomCard();
         }
       });
-      const total = Object.values(updatedCards).reduce((sum, value) => sum + (value ?? 0), 0);
+      const total = Object.values(updatedCards).reduce<number>(
+        (sum, value) => sum + (value ?? 0),
+        0,
+      );
       const energy = clamp01(total / reactorLimit);
       return {
         ...prev,
