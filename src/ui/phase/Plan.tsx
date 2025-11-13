@@ -4,7 +4,6 @@ import type { PhaseComponentProps } from "./types";
 const Plan: React.FC<PhaseComponentProps> = ({ state, dispatchEvent, localPlayer, players, helpers }) => {
   const { RoundHeader, JobBadge } = helpers;
   const { round, reactorLimit, shipHealth01, hand, slotCard } = state;
-  const otherPlayers = players.filter((p) => p.id !== localPlayer.id);
   const localCard = round.cardsPlayed[localPlayer.id];
 
   return (
@@ -48,9 +47,9 @@ const Plan: React.FC<PhaseComponentProps> = ({ state, dispatchEvent, localPlayer
 
       <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5 text-[11px] text-slate-400">
         <div className="font-semibold text-slate-200 mb-1">Crew</div>
-        {otherPlayers.map((p) => (
+        {players.map((p) => (
           <div key={p.id} className="flex justify-between items-center">
-            <span>{p.name}</span>
+            <span>{p.id === localPlayer.id ? `${p.name} (You)` : p.name}</span>
             <JobBadge job={p.job} compact />
           </div>
         ))}

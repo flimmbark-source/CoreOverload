@@ -2,6 +2,7 @@ import React from "react";
 import { applyItem } from "./game/actions/items";
 import type {
   ItemInstance,
+  Job,
   MinigameResult,
   MinigameTier,
   Phase,
@@ -9,7 +10,8 @@ import type {
   RoundOutcome,
   RoundState,
 } from "./game/types";
-import { createInitialRound, createDefaultPlayers, LOCAL_PLAYER_ID } from "./game/setup";
+import { JOBS } from "./game/types";
+import { createInitialRound, createDefaultPlayers, createJobItems, LOCAL_PLAYER_ID } from "./game/setup";
 import { createRng, shuffleArray } from "./game/rng";
 import { InventoryPanel } from "./ui/inventory/InventoryPanel";
 import { InventoryTabButton } from "./ui/inventory/InventoryTabButton";
@@ -45,6 +47,8 @@ type ActiveMinigame = {
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const CARD_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const isJob = (value: unknown): value is Job =>
+  typeof value === "string" && (JOBS as readonly string[]).includes(value);
 
 const phaseComponentMap: Partial<Record<Phase, React.FC<PhaseComponentProps>>> = {
   Lobby: LobbyPhase,
@@ -315,6 +319,18 @@ const App: React.FC = () => {
             setPlayers((prev) =>
               prev.map((player) =>
                 player.id === localPlayer.id ? { ...player, name: nextName } : player,
+              ),
+            );
+          }
+          break;
+        }
+        case "lobby.selectJob": {
+          if (isJob(payload) && localPlayer) {
+            setPlayers((prev) =>
+              prev.map((player) =>
+                player.id === localPlayer.id
+                  ? { ...player, job: payload, items: createJobItems(payload) }
+                  : player,
               ),
             );
           }

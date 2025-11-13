@@ -2,6 +2,8 @@ export type Role = "Crew" | "Saboteur";
 
 export type Job = "PowerEngineer" | "CoolantTech" | "FluxSpecialist";
 
+export const JOBS: Job[] = ["PowerEngineer", "CoolantTech", "FluxSpecialist"];
+
 export type Phase =
   | "Lobby"
   | "RoleReveal"
