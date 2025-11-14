@@ -67,15 +67,15 @@ export const loadBalanceConfig = async (): Promise<BalanceConfig> => {
 };
 
 const ITEM_TIER_MULTIPLIERS: Record<ItemId, Record<MinigameTier, number>> = {
-  BOOST: { success: 1, partial: 1 / 3, fail: 0 },
-  VENT: { success: 1, partial: 2 / 3, fail: 1 / 3 },
-  EQUALIZER: { success: 1, partial: 0.5, fail: 0 },
+  BOOST: { SUCCESS: 1, PARTIAL: 1 / 3, FAIL: 0 },
+  VENT: { SUCCESS: 1, PARTIAL: 2 / 3, FAIL: 1 / 3 },
+  EQUALIZER: { SUCCESS: 1, PARTIAL: 0.5, FAIL: 0 },
 };
 
 const ITEM_SHIP_MULTIPLIERS: Record<ItemId, Record<MinigameTier, number>> = {
-  BOOST: { success: 0, partial: 0, fail: 0 },
-  VENT: { success: 1, partial: 0, fail: -0.4 },
-  EQUALIZER: { success: 0, partial: 0, fail: 0 },
+  BOOST: { SUCCESS: 0, PARTIAL: 0, FAIL: 0 },
+  VENT: { SUCCESS: 1, PARTIAL: 0, FAIL: -0.4 },
+  EQUALIZER: { SUCCESS: 0, PARTIAL: 0, FAIL: 0 },
 };
 
 const roundHundred = (value: number) => Math.round(value * 100) / 100;

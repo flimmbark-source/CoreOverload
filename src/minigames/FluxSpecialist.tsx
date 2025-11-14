@@ -1,5 +1,5 @@
 import React from "react";
-import type { MinigameTier } from "../game/types";
+import { getMinigameTier } from "../game/minigame";
 import type { MinigameProps } from "./common";
 import { clamp01 } from "./utils";
 
@@ -462,22 +462,19 @@ export const FluxSpecialistMinigame: React.FC<MinigameProps> = ({
         const pct = Math.round(ratio * 100);
 
         let outcome: string;
-        let tier: MinigameTier;
-        if (ratio >= 0.7 && missed === 0) {
-          tier = "success";
+        const tier = getMinigameTier(pct);
+        if (tier === "SUCCESS" && missed === 0) {
           outcome = `SUCCESS: ${pct}% spikes stabilized (0 missed) — +1 Stability, ±2 Equalizer bonus.`;
-        } else if (ratio >= 0.4 && missed <= 3) {
-          tier = "partial";
+        } else if (tier !== "FAIL" && missed <= 3) {
           outcome = `PARTIAL: ${pct}% spikes stabilized (${missed} missed) — +1 Stability.`;
         } else {
-          tier = "fail";
           outcome = `FAIL: ${pct}% spikes stabilized (${missed} missed) — 0 Stability.`;
         }
 
         if (!stopped) {
           setResult(outcome);
           setRunning(false);
-          onComplete(tier, ratio);
+          onComplete(pct);
         }
         return;
       }
