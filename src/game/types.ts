@@ -34,16 +34,16 @@ export type Player = {
   items: ItemInstance[];
 };
 
-export type MinigameTier = "fail" | "partial" | "success";
+export type MinigameTier = "FAIL" | "PARTIAL" | "SUCCESS";
 
 export type MinigameResult = {
   playerId: string;
   job: Job;
   itemId: ItemId;
   tier: MinigameTier;
-  score01: number;
+  percentFinished: number;
   deltaTotal: number;
-  deltaShipHealth01: number;
+  deltaShipHP: number;
 };
 
 export type RoundOutcome = "Clear" | "Fail" | "Overload" | null;

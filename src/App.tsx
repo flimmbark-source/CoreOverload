@@ -1,11 +1,11 @@
 import React from "react";
 import { applyItem } from "./game/actions/items";
+import { getCachedBalanceConfig } from "./game/config";
 import type {
   ItemId,
   ItemInstance,
   Job,
   MinigameResult,
-  MinigameTier,
   Phase,
   Player,
   RoundOutcome,
@@ -32,6 +32,7 @@ import {
 import { JobBadge, RoleBadge } from "./ui/atoms/Badges";
 import { RoundHeader } from "./ui/atoms/RoundHeader";
 import { energyLabel, jobLabel } from "./ui/helpers";
+import { resolveMinigame } from "./game/minigame";
 import { getMinigameForJob } from "./minigames/registry";
 
 type ActiveMinigame = {
@@ -50,7 +51,11 @@ const JOB_MINIGAME_NAME: Record<Job, string> = {
   FluxSpecialist: "Flux Equalization",
 };
 
+const SHIP_HP_MAX = 10;
+const clampShipHP = (value: number) => Math.max(0, Math.min(SHIP_HP_MAX, value));
+
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const toShipHPDelta = (delta01: number) => delta01 * SHIP_HP_MAX;
 const CARD_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const isJob = (value: unknown): value is Job =>
   typeof value === "string" && (JOBS as readonly string[]).includes(value);
@@ -71,13 +76,15 @@ const App: React.FC = () => {
   const [phase, setPhase] = React.useState<Phase>("Lobby");
   const [roundIndex, setRoundIndex] = React.useState(1);
   const [round, setRound] = React.useState<RoundState>(() => createInitialRound(1, players));
-  const [shipHealth01, setShipHealth01] = React.useState(1);
+  const [shipHP, setShipHP] = React.useState(SHIP_HP_MAX);
   const [overloads, setOverloads] = React.useState(0);
   const [clears, setClears] = React.useState(0);
   const [hand, setHand] = React.useState<number[]>([]);
   const [slotCard, setSlotCard] = React.useState<number | null>(null);
   const [isInventoryOpen, setIsInventoryOpen] = React.useState(false);
   const [activeMinigame, setActiveMinigame] = React.useState<ActiveMinigame | null>(null);
+
+  const shipHealth01 = clamp01(shipHP / SHIP_HP_MAX);
 
   const rngRef = React.useRef(createRng(Date.now()));
   const jobMinigameRoundRef = React.useRef<number | null>(null);
@@ -181,14 +188,15 @@ const App: React.FC = () => {
         context: { isBelowGate: round.totalAfterItems < round.gate },
       });
 
+      const shipDeltaHP = toShipHPDelta(effect.deltaShip);
       const result: MinigameResult = {
         playerId: player.id,
         job: player.job,
         itemId: item.id,
-        tier: "success",
-        score01: 1,
+        tier: "SUCCESS",
+        percentFinished: 100,
         deltaTotal: effect.deltaTotal,
-        deltaShipHealth01: effect.deltaShip,
+        deltaShipHP: shipDeltaHP,
       };
 
       setRound((prev) => ({
@@ -196,7 +204,7 @@ const App: React.FC = () => {
         totalAfterItems: prev.totalAfterItems + result.deltaTotal,
         minigameResults: [...prev.minigameResults, result],
       }));
-      setShipHealth01((prev) => clamp01(prev + result.deltaShipHealth01));
+      setShipHP((prev) => clampShipHP(prev + shipDeltaHP));
       setPlayers((prev) =>
         prev.map((p) =>
           p.id === player.id
@@ -231,31 +239,29 @@ const App: React.FC = () => {
   }, [activeMinigame, localPlayer, phase, round.index, startJobMinigame]);
 
   const handleMinigameComplete = React.useCallback(
-    (result: MinigameResult) => {
-      const jobItemId = JOB_MINIGAME_ITEM_ID[result.job];
-      const effect = applyItem({
-        round: { totalAfterItems: round.totalAfterItems, gate: round.gate },
-        itemId: jobItemId,
-        context: { isBelowGate: round.totalAfterItems < round.gate },
-      });
+    (percentFinished: number) => {
+      if (!activeMinigame) return;
+      const player = activeMinigame.player;
+      const jobItemId = JOB_MINIGAME_ITEM_ID[player.job];
+      const resolved = resolveMinigame(percentFinished);
 
       const adjustedResult: MinigameResult = {
-        ...result,
+        playerId: player.id,
+        job: player.job,
         itemId: jobItemId,
-        deltaTotal: effect.deltaTotal,
-        deltaShipHealth01: effect.deltaShip,
+        ...resolved,
       };
 
       setRound((prev) => ({
         ...prev,
-        totalAfterItems: prev.totalAfterItems + adjustedResult.deltaTotal,
+        totalAfterItems: prev.totalAfterItems + resolved.deltaTotal,
         minigameResults: [...prev.minigameResults, adjustedResult],
       }));
-      setShipHealth01((prev) => clamp01(prev + adjustedResult.deltaShipHealth01));
+      setShipHP((prev) => clampShipHP(prev + resolved.deltaShipHP));
       setActiveMinigame(null);
       setPhase("Maintenance");
     },
-    [round.gate, round.totalAfterItems],
+    [activeMinigame],
   );
 
   const resolveMaintenance = React.useCallback(() => {
@@ -265,23 +271,24 @@ const App: React.FC = () => {
     else if (total >= round.gate) outcome = "Clear";
     else outcome = "Fail";
 
-    let newShip = shipHealth01;
+    let newShip = shipHP;
     let newOverloads = overloads;
     let newClears = clears;
+    const balance = getCachedBalanceConfig();
 
     if (outcome === "Overload") {
-      newShip = clamp01(newShip - 0.3);
+      newShip = clampShipHP(newShip - balance.overloadLoss * SHIP_HP_MAX);
       newOverloads += 1;
     } else if (outcome === "Fail") {
-      newShip = clamp01(newShip - 0.1);
+      newShip = clampShipHP(newShip - balance.failLoss * SHIP_HP_MAX);
     } else {
       newClears += 1;
-      if (round.minigameResults.every((r) => r.tier === "success")) {
-        newShip = clamp01(newShip + 0.05);
+      if (round.minigameResults.every((r) => r.tier === "SUCCESS")) {
+        newShip = clampShipHP(newShip + balance.allSuccessGain * SHIP_HP_MAX);
       }
     }
 
-    setShipHealth01(newShip);
+    setShipHP(newShip);
     setOverloads(newOverloads);
     setClears(newClears);
     setRound((prev) => ({ ...prev, outcome }));
@@ -304,14 +311,14 @@ const App: React.FC = () => {
     );
     dealHand();
     setPhase("Plan");
-  }, [clears, dealHand, overloads, players, reactorLimit, round, roundIndex, shipHealth01]);
+  }, [clears, dealHand, overloads, players, reactorLimit, round, roundIndex, shipHP]);
 
   const restartGame = React.useCallback(() => {
     const basePlayers = createDefaultPlayers();
     setPlayers(basePlayers);
     const limit = basePlayers.length * 6;
     setReactorLimit(limit);
-    setShipHealth01(1);
+    setShipHP(SHIP_HP_MAX);
     setOverloads(0);
     setClears(0);
     setRoundIndex(1);
@@ -393,6 +400,7 @@ const App: React.FC = () => {
     roundIndex,
     reactorLimit,
     shipHealth01,
+    shipHP,
     overloads,
     clears,
     hand,
@@ -435,17 +443,7 @@ const App: React.FC = () => {
             key={minigameKey}
             reactorEnergy={round.reactorEnergy01}
             shipHealth={shipHealth01}
-            onComplete={(tier: MinigameTier, score01: number, deltaTotal = 0, deltaShipHealth01 = 0) =>
-              handleMinigameComplete({
-                playerId: player.id,
-                job: player.job,
-                itemId: JOB_MINIGAME_ITEM_ID[player.job],
-                tier,
-                score01,
-                deltaTotal,
-                deltaShipHealth01,
-              })
-            }
+            onComplete={(percentFinished: number) => handleMinigameComplete(percentFinished)}
           />
         </div>
       </div>

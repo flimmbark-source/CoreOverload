@@ -1,5 +1,5 @@
 import React from "react";
-import type { MinigameTier } from "../game/types";
+import { getMinigameTier } from "../game/minigame";
 import type { MinigameProps } from "./common";
 import { clamp01 } from "./utils";
 
@@ -359,22 +359,19 @@ export const CoolantTechMinigame: React.FC<MinigameProps> = ({
         const pct = Math.round(ratio * 100);
 
         let outcome: string;
-        let tier: MinigameTier;
-        if (ratio >= 0.7 && overflow === 0) {
-          tier = "success";
+        const tier = getMinigameTier(pct);
+        if (tier === "SUCCESS" && overflow === 0) {
           outcome = `SUCCESS: ${pct}% leaks fully patched (0 overflow) — +1 Stability, optional -1 energy buffer.`;
-        } else if (ratio >= 0.4 && overflow <= 2) {
-          tier = "partial";
+        } else if (tier !== "FAIL" && overflow <= 2) {
           outcome = `PARTIAL: ${pct}% leaks fully patched (${overflow} overflow) — +1 Stability.`;
         } else {
-          tier = "fail";
           outcome = `FAIL: ${pct}% leaks fully patched (${overflow} overflow) — 0 Stability.`;
         }
 
         if (!stopped) {
           setResult(outcome);
           setRunning(false);
-          onComplete(tier, ratio);
+          onComplete(pct);
         }
         return;
       }

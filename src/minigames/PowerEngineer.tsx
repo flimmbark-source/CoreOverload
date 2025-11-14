@@ -1,5 +1,5 @@
 import React from "react";
-import type { MinigameTier } from "../game/types";
+import { getMinigameTier } from "../game/minigame";
 import type { MinigameProps } from "./common";
 import { clamp01 } from "./utils";
 
@@ -326,22 +326,19 @@ export const PowerEngineerMinigame: React.FC<MinigameProps> = ({ reactorEnergy, 
         // Final result
         const ratio = clamp01(timeInBandMs / GAME_DURATION_MS);
         const pct = Math.round(ratio * 100);
+        const tier = getMinigameTier(pct);
         let outcome: string;
-        let tier: MinigameTier;
-        if (ratio >= 0.7) {
-          tier = "success";
+        if (tier === "SUCCESS") {
           outcome = `SUCCESS: ${pct}% in band (Grants +1 Stability, optional +1 Buffer)`;
-        } else if (ratio >= 0.4) {
-          tier = "partial";
+        } else if (tier === "PARTIAL") {
           outcome = `PARTIAL: ${pct}% in band (Grants +1 Stability)`;
         } else {
-          tier = "fail";
           outcome = `FAIL: ${pct}% in band (0 Stability)`;
         }
         if (!stopped) {
           setResult(outcome);
           setRunning(false);
-          onComplete(tier, ratio);
+          onComplete(pct);
         }
         return;
       }

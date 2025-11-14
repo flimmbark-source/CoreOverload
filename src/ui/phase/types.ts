@@ -6,6 +6,7 @@ export type PhaseUIState = {
   roundIndex: number;
   reactorLimit: number;
   shipHealth01: number;
+  shipHP: number;
   overloads: number;
   clears: number;
   hand: number[];
