@@ -62,17 +62,32 @@ const Maintenance: React.FC<PhaseComponentProps> = ({ state, dispatchEvent, play
       )}
       <div className="rounded-2xl border border-slate-700/80 bg-slate-950/50 p-3">
         <div className="text-[11px] text-slate-400 uppercase tracking-wide">Station Effects</div>
+        {round.minigameResults.length > 0 && (
+          <div className="mt-1 text-[10px] text-slate-500 uppercase tracking-wide flex justify-between">
+            <span>Item</span>
+            <span>Reactor · Ship HP</span>
+          </div>
+        )}
         <ul className="mt-2 text-[11px] text-slate-200 space-y-1">
-          {round.minigameResults.map((r, idx) => (
-            <li key={idx}>
-              Reactor {formatDelta(r.deltaTotal)} · Ship HP {formatDelta(r.deltaShipHP)}
-            </li>
-          ))}
+          {round.minigameResults.map((r, idx) => {
+            const player = players.find((p) => p.id === r.playerId);
+            return (
+              <li key={idx} className="flex justify-between">
+                <span>{player?.name ?? jobLabel(r.job)}</span>
+                <span>
+                  {formatDelta(r.deltaTotal)} · {formatDelta(r.deltaShipHP)}
+                </span>
+              </li>
+            );
+          })}
           {round.minigameResults.length === 0 && <li>No station items used.</li>}
         </ul>
         {round.minigameResults.length > 0 && (
-          <div className="text-[11px] text-slate-200 mt-3 border-t border-slate-700/80 pt-2">
-            Reactor {formatDelta(totalReactorDelta)} · Ship HP {formatDelta(totalShipDelta)}
+          <div className="text-[11px] text-slate-200 mt-3 border-t border-slate-700/80 pt-2 flex justify-between">
+            <span>Total</span>
+            <span>
+              {formatDelta(totalReactorDelta)} · {formatDelta(totalShipDelta)}
+            </span>
           </div>
         )}
         {overloaded && (
