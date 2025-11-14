@@ -3,7 +3,7 @@ import type { PhaseComponentProps } from "./types";
 
 const Maintenance: React.FC<PhaseComponentProps> = ({ state, dispatchEvent, players, helpers }) => {
   const { RoundHeader, jobLabel } = helpers;
-  const { round, reactorLimit, shipHealth01, shipHP, overloads, roundIndex } = state;
+  const { round, reactorLimit, shipHealth01, overloads, roundIndex } = state;
   const total = round.totalAfterItems;
   const outcome = round.outcome;
   const tierStyles: Record<string, string> = {
@@ -53,9 +53,6 @@ const Maintenance: React.FC<PhaseComponentProps> = ({ state, dispatchEvent, play
         ) : (
           <div className="text-sm text-slate-200 mt-1">No system checks have been recorded.</div>
         )}
-        <div className="text-[11px] text-slate-200 mt-3">
-          Reactor Total: {round.totalAfterItems} · Gate: {round.gate} · Limit: {reactorLimit} · Ship HP: {shipHP}
-        </div>
       </div>
       {outcome && (
         <div className={`rounded-2xl border p-3 ${outcomeBannerColor}`}>
@@ -66,16 +63,11 @@ const Maintenance: React.FC<PhaseComponentProps> = ({ state, dispatchEvent, play
       <div className="rounded-2xl border border-slate-700/80 bg-slate-950/50 p-3">
         <div className="text-[11px] text-slate-400 uppercase tracking-wide">Station Effects</div>
         <ul className="mt-2 text-[11px] text-slate-200 space-y-1">
-          {round.minigameResults.map((r, idx) => {
-            const player = players.find((p) => p.id === r.playerId);
-            return (
-              <li key={idx}>
-                {player?.name} [{jobLabel(r.job)}] {r.itemId}: {r.tier} ({r.percentFinished}%) → Reactor
-                {" "}
-                {formatDelta(r.deltaTotal)} · Ship HP {formatDelta(r.deltaShipHP)}
-              </li>
-            );
-          })}
+          {round.minigameResults.map((r, idx) => (
+            <li key={idx}>
+              Reactor {formatDelta(r.deltaTotal)} · Ship HP {formatDelta(r.deltaShipHP)}
+            </li>
+          ))}
           {round.minigameResults.length === 0 && <li>No station items used.</li>}
         </ul>
         {round.minigameResults.length > 0 && (
