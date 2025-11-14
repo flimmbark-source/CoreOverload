@@ -8,7 +8,12 @@ const Engage: React.FC<PhaseComponentProps> = ({ state, localPlayer, players, he
 
   return (
     <div className="flex flex-col gap-4 w-full max-w-md">
-      <RoundHeader gate={round.gate} reactorLimit={reactorLimit} shipHealth={shipHealth01} />
+      <RoundHeader
+        gate={round.gate}
+        reactorLimit={reactorLimit}
+        shipHealth={shipHealth01}
+        enginePower={round.totalAfterItems}
+      />
       <div className="rounded-2xl bg-slate-950/90 border border-slate-800 p-4 text-sm text-slate-200">
         <p className="leading-relaxed">
           All crew stations are live. Operate your

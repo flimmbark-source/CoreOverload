@@ -29,7 +29,12 @@ const Maintenance: React.FC<PhaseComponentProps> = ({ state, dispatchEvent, play
 
   return (
     <div className="flex flex-col gap-4 w-full max-w-md">
-      <RoundHeader gate={round.gate} reactorLimit={reactorLimit} shipHealth={shipHealth01} />
+      <RoundHeader
+        gate={round.gate}
+        reactorLimit={reactorLimit}
+        shipHealth={shipHealth01}
+        enginePower={round.totalAfterItems}
+      />
       <div className="rounded-2xl border border-slate-600/70 bg-slate-900/60 p-4">
         <div className="text-[11px] uppercase tracking-wide text-slate-300">System Check</div>
         {round.minigameResults.length > 0 ? (

@@ -10,7 +10,12 @@ const Ignition: React.FC<PhaseComponentProps> = ({ state, dispatchEvent, localPl
 
   return (
     <div className="flex flex-col gap-4 w-full max-w-md">
-      <RoundHeader gate={round.gate} reactorLimit={reactorLimit} shipHealth={shipHealth01} />
+      <RoundHeader
+        gate={round.gate}
+        reactorLimit={reactorLimit}
+        shipHealth={shipHealth01}
+        enginePower={round.totalAfterItems}
+      />
       <div className="rounded-2xl bg-slate-950/90 border border-slate-800 p-3 flex flex-col gap-2">
         <div className="flex justify-between text-sm">
           <span>Your card</span>

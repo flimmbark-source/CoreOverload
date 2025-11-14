@@ -4,6 +4,7 @@ type RoundHeaderProps = {
   gate: number;
   reactorLimit: number;
   shipHealth: number;
+  enginePower: number;
 };
 
 const ShipBar: React.FC<{ health: number }> = ({ health }) => (
@@ -15,10 +16,11 @@ const ShipBar: React.FC<{ health: number }> = ({ health }) => (
   </div>
 );
 
-export const RoundHeader: React.FC<RoundHeaderProps> = ({ gate, reactorLimit, shipHealth }) => (
+export const RoundHeader: React.FC<RoundHeaderProps> = ({ gate, reactorLimit, shipHealth, enginePower }) => (
   <header className="w-full flex flex-col items-center justify-center mb-2 mt-1">
     <div className="text-xs text-slate-200 flex items-center gap-3 justify-center">
       <span>🚧 Gate {gate}</span>
+      <span>⚡ Power {enginePower}</span>
       <span>☢️ Limit {reactorLimit}</span>
     </div>
     <div className="mt-2">

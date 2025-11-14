@@ -8,7 +8,12 @@ const Plan: React.FC<PhaseComponentProps> = ({ state, dispatchEvent, localPlayer
 
   return (
     <div className="flex flex-col gap-4 w-full max-w-md">
-      <RoundHeader gate={round.gate} reactorLimit={reactorLimit} shipHealth={shipHealth01} />
+      <RoundHeader
+        gate={round.gate}
+        reactorLimit={reactorLimit}
+        shipHealth={shipHealth01}
+        enginePower={round.totalAfterItems}
+      />
 
       <p className="text-[11px] text-slate-300 text-center">Draw 5 from your 1–9 deck. Place 1 into the power slot.</p>
 

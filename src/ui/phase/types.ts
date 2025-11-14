@@ -22,6 +22,7 @@ export type PhaseUIHelpers = {
     gate: number;
     reactorLimit: number;
     shipHealth: number;
+    enginePower: number;
   }>;
   jobLabel: (job: Job) => string;
   energyLabel: (value: number) => string;
